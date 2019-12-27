@@ -24,7 +24,7 @@ const createSendToken = (user, statusCode, req, res) => {
   console.log(user.id);
   const token = signToken(user.id);
 
-  res.cookie('jwt', token, {
+  res.cookie('jwt', user.token, {
     expires: new Date(
       Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
     ),
@@ -32,6 +32,18 @@ const createSendToken = (user, statusCode, req, res) => {
     secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
   });
 
+  /*
+  
+  token, {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
+  }
+  
+  */
+  
   // Remove password from output
   user.password = undefined;
 
