@@ -1,21 +1,28 @@
+const Validator = require('validatorjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { promisify } = require('util');
 
-const User = require('../models/user.model');
+const chatkit = require('../utils/chatkit');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
+const Email = require('../utils/email');
 
 const signToken = id => {
-  console.log(process.env.JWT_SECRET);
+  const jsonPayload = {
+    instance: process.env.PUSHER_INSTANCE_ID,
+    iss: process.env.PUSHER_KEY_ID,
+    iat: Date.now(),
+    exp: Date.now() + 3600,
+    sub: id
+  };
 
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN
-  });
+  return jwt.sign(jsonPayload, process.env.JWT_SECRET);
 };
 
 const createSendToken = (user, statusCode, req, res) => {
-  const token = signToken(user._id);
+  console.log(user.id);
+  const token = signToken(user.id);
 
   res.cookie('jwt', token, {
     expires: new Date(
@@ -37,39 +44,86 @@ const createSendToken = (user, statusCode, req, res) => {
   });
 };
 
-// User SignUp
+// Pusher SignUp
 exports.signUp = catchAsync(async (req, res, next) => {
-  const newUser = await User.create({
+  const data = {
+    id: req.body.id,
     name: req.body.name,
-    email: req.body.email,
-    password: req.body.password,
-    gender: req.body.gender,
-    age: req.body.age,
-    credits: 120
-  });
+    customData: {
+      email: req.body.email,
+      password: req.body.password,
+      gender: req.body.gender,
+      age: req.body.age,
+      credits: 120,
+      role: 'user'
+    }
+  };
 
-  // await new Email(newUser, url).sendWelcome();
+  /*
+  const rules = {
+    id: 'required|size:7',
+    name: 'required|size:3',
+    customData: {
+      email: 'required|email',
+      age: 'min:18'
+    }
+  };
+
+  const validation = new Validator(data, rules);
+
+  validation.errors.get();
+
+  if (validation.passes()) { 
+    */
+  const newUser = await chatkit.createUser(data);
+
+  const url = `${req.protocol}://${req.get('host')}/verify/${req.body.id}`;
+
+  // Sending Mail
+  if (process.env.NODE_ENV === 'production') {
+    await new Email(newUser, url).sendWelcome(url);
+  }
 
   createSendToken(newUser, 201, req, res);
+  /*} else {
+    return next(new AppError('Please provide appropriate data', 400));
+  }*/
 });
 
 exports.login = catchAsync(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email: id, password } = req.body;
 
-  if (!email || !password) {
-    return next(new AppError('Please provide email and password!', 400));
+  const authData = chatkit.authenticate({
+    userId: id
+  });
+
+  const decoded = await promisify(jwt.verify)(
+    authData.body.access_token,
+    process.env.JWT_PUSHER_SECRET
+  );
+
+  const user = await chatkit.getUser({
+    id: decoded.sub
+  });
+
+  if (user.custom_data.password !== password) {
+    return next(new AppError('Email or Password is incorrect!', 404));
   }
 
-  const user = await User.findOne({ email }).select('+password');
-
-  if (!user || !(await user.correctPassword(password, user.password))) {
-    return next(new AppError('Incorrect email or password', 401));
+  // For Banned Users
+  if (user.custom_data.banned) {
+    return next(
+      new AppError('You are currently from this server banned!', 403)
+    );
   }
 
-  // For Banned Admins
-  if (user.role === 'admin' && user.banned) {
-    return next(new AppError('You are banned from the Server!', 403));
+  // For Admins Fake Profiles
+  if (user.custom_data.userAdmin) {
+    return next(new AppError('This user cannot login into the Server!', 403));
   }
+
+  // Sending token
+  user.token = authData.body.access_token;
 
   createSendToken(user, 200, req, res);
 });
@@ -77,8 +131,14 @@ exports.login = catchAsync(async (req, res, next) => {
 // Restricted Routes for some users
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
+    if (req.originalUrl === '/v1/api/admin/logback') {
+      if (req.user.custom_data.userAdmin) {
+        return next();
+      }
+    }
+
     // roles ['owner', 'admin']. role='user'
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(req.user.custom_data.role)) {
       return next(
         new AppError('You do not have permission to perform this action', 403)
       );
@@ -90,31 +150,55 @@ exports.restrictTo = (...roles) => {
 
 // Forgot Password
 exports.forgotPassword = catchAsync(async (req, res, next) => {
-  const user = await User.findOne({ email: req.body.email });
+  const user = await chatkit.getUser({ id: req.body.name });
+
   if (!user) {
-    return next(new AppError('There is no user with email address.', 404));
+    return next(new AppError('There is no user with name.', 404));
   }
 
   // 2) Generate the random reset token
-  const resetToken = user.createPasswordResetToken();
-  await user.save({ validateBeforeSave: false });
+  const resetTokenByte = crypto.randomBytes(32).toString('hex');
+  const resetToken = `${resetTokenByte}$_$${user.id}`;
+
+  const passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetTokenByte)
+    .digest('hex');
+
+  // console.log({ resetToken }, this.passwordResetToken);
+
+  const passwordResetExpires = Date.now() + 10 * 60 * 1000;
+
+  // 3) Saving to User data
+  await chatkit.updateUser({
+    id: req.body.name,
+    name: user.name,
+    avatarURL: user.avatarURL,
+    customData: {
+      ...user.custom_data,
+      passwordResetToken,
+      passwordResetExpires
+    }
+  });
 
   // 3) Send it to user's email
   try {
     const resetURL = `${req.protocol}://${req.get(
       'host'
     )}/api/v1/users/resetPassword/${resetToken}`;
-    // await new Email(user, resetURL).sendPasswordReset();
+
+    // Sending Email
+    console.log(resetURL);
+
+    if (process.env.NODE_ENV === 'production') {
+      await new Email(user, resetURL).sendPasswordReset(resetURL);
+    }
 
     res.status(200).json({
       status: 'success',
       message: `Token sent to email! ${resetURL}`
     });
   } catch (err) {
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save({ validateBeforeSave: false });
-
     return next(
       new AppError('There was an error sending the email. Try again later!'),
       500
@@ -127,26 +211,48 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
   // 1) Get user based on the token
   const hashedToken = crypto
     .createHash('sha256')
-    .update(req.params.token)
+    .update(req.params.token.split('$_$')[0])
     .digest('hex');
 
-  const user = await User.findOne({
-    passwordResetToken: hashedToken,
-    passwordResetExpires: { $gt: Date.now() }
+  const userId = req.params.token.split('$_$')[1];
+
+  const user = await chatkit.getUser({ id: userId });
+
+  // await chatkit.updateUser({
+  //   id: userId,
+  //   name: user.name,
+  //   avatarURL: user.avatarURL,
+  //   customData: {
+  //     passwordResetToken: hashedToken,
+  //     passwordResetExpires: { $gt: Date.now() }
+  //   }
+  // });
+
+  console.log(user.custom_data.passwordResetToken, hashedToken);
+  if (
+    user.custom_data.passwordResetToken != hashedToken ||
+    user.custom_data.passwordResetExpires < Date.now()
+  ) {
+    return next(new AppError('Expired or Wrong Token! Please try again', 400));
+  }
+
+  // Updating User
+  await chatkit.updateUser({
+    id: userId,
+    name: user.name,
+    avatarURL: user.avatarURL,
+    customData: {
+      ...user.custom_data,
+      password: req.body.password,
+      passwordResetExpires: undefined,
+      passwordResetToken: undefined
+    }
   });
 
-  // 2) If token has not expired, and there is user, set the new password
-  if (!user) {
-    return next(new AppError('Token is invalid or has expired', 400));
-  }
-  user.password = req.body.password;
-  user.passwordResetToken = undefined;
-  user.passwordResetExpires = undefined;
-  await user.save();
+  const updatedPasswordUser = await chatkit.getUser({ id: userId });
 
-  // 3) Update changedPasswordAt property for the user
   // 4) Log the user in
-  createSendToken(user, 200, req, res);
+  createSendToken(updatedPasswordUser, 200, req, res);
 });
 
 // Protecting Endpoints for some users
@@ -169,58 +275,24 @@ exports.protect = catchAsync(async (req, res, next) => {
     );
   }
 
-  // 2) Verification token
-  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  const decoded = await promisify(jwt.verify)(
+    token,
+    process.env.JWT_PUSHER_SECRET
+  );
 
-  // 3) Check if user still exists
-  const currentUser = await User.findById(decoded.id);
-  if (!currentUser) {
-    return next(
-      new AppError(
-        'The user belonging to this token does no longer exist.',
-        401
-      )
-    );
-  }
+  const user = await chatkit.getUser({
+    id: decoded.sub
+  });
 
-  // 4) Check if user changed password after the token was issued
-  if (currentUser.changedPasswordAfter(decoded.iat)) {
-    return next(
-      new AppError('User has changed password! Please log in again!', 401)
-    );
-  }
+  req.user = user;
+  // req.locals.user = user;
 
-  // GRANT ACCESS TO PROTECTED ROUTE
-  req.user = currentUser;
-  res.locals.user = currentUser;
   next();
 });
 
-exports.isLoggedIn = async (req, res, next) => {
-  if (req.cookies.jwt) {
-    try {
-      // 1) verify token
-      const decoded = await promisify(jwt.verify)(
-        req.cookies.jwt,
-        process.env.JWT_SECRET
-      );
+// SAMLL MIDDLEWARE FOR REFERAL LINK USERS
+exports.referalLink = (req, res, next) => {
+  if (!req.params.link) next();
 
-      // 2) Check if user still exists
-      const currentUser = await User.findById(decoded.id);
-      if (!currentUser) {
-        return next();
-      }
-
-      // 3) Check if user changed password after the token was issued
-      if (currentUser.changedPasswordAfter(decoded.iat)) {
-        return next();
-      }
-
-      res.locals.user = currentUser;
-      return next();
-    } catch (err) {
-      return next();
-    }
-  }
-  next();
+  req.body.referalLinkAdmin = req.params.link;
 };
