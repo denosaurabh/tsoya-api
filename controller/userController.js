@@ -144,6 +144,8 @@ exports.favouriteUser = catchasync(async (req, res, next) => {
   const userId = req.user.id;
   const favouriteUserId = req.params.id;
 
+  await chatkit.getUser({ id: favouriteUserId });
+
   const user = await chatkit.getUser({ id: userId });
 
   let gotErr = false;
@@ -285,7 +287,7 @@ exports.verifyUser = catchasync(async (req, res, next) => {
 });
 
 exports.referalLinkAttach = catchasync(async (req, res, next) => {
-  const adminId = req.params.adminId;
+  const { adminId } = req.params;
 
   await chatkit.updateUser({
     id: req.user.id,

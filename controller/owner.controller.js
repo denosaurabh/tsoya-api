@@ -161,7 +161,7 @@ exports.createReferalLink = catchAsync(async (req, res, next) => {
   )}/v1/api/referal/link/${adminId}`;
 
   await chatkit.updateUser({
-    id: req.adminUser.id,
+    id: adminId,
     name: req.adminUser.name,
     avatarURL: req.adminUser.avatarURL,
     customData: {

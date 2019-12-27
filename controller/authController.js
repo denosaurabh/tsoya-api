@@ -81,7 +81,7 @@ exports.signUp = catchAsync(async (req, res, next) => {
 
   // Sending Mail
   if (process.env.NODE_ENV === 'production') {
-    await new Email(newUser, url).sendWelcome(url);
+    //await new Email(newUser, url).sendWelcome(url);
   }
 
   createSendToken(newUser, 201, req, res);

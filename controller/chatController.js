@@ -13,19 +13,6 @@ exports.uploadUserFile = upload.single('file');
 exports.buildRoom = catchAsync(async (req, res, next) => {
   const user = await chatkit.getUser({ id: req.params.id });
 
-  try {
-    await chatkit.getRoom({
-      roomId: `${req.user.name}-${user.name}`
-    });
-  } catch (err) {
-    return next(
-      new AppError(
-        'The chat room with this user is already in your rooms!',
-        400
-      )
-    );
-  }
-
   const room = await chatkit.createRoom({
     id: `${req.user.name}-${user.name}`,
     creatorId: req.user.id,
