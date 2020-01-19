@@ -1,3 +1,4 @@
+const rateLimit = require('express-rate-limit');
 const Validator = require('validatorjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -7,6 +8,12 @@ const chatkit = require('../utils/chatkit');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 const Email = require('../utils/email');
+
+exports.signUplimiter = rateLimit({
+  max: 4,
+  windowMs: 31536000 * 1000,
+  message: 'A user can only sign up once!'
+});
 
 const signToken = id => {
   const jsonPayload = {
@@ -21,10 +28,9 @@ const signToken = id => {
 };
 
 const createSendToken = (user, statusCode, req, res) => {
-  console.log(user.id);
   const token = signToken(user.id);
 
-  res.cookie('jwt', user.token, {
+  res.cookie('jwt', token, {
     expires: new Date(
       Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
     ),
@@ -32,18 +38,6 @@ const createSendToken = (user, statusCode, req, res) => {
     secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
   });
 
-  /*
-  
-  token, {
-    expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
-    ),
-    httpOnly: true,
-    secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
-  }
-  
-  */
-  
   // Remove password from output
   user.password = undefined;
 
@@ -103,19 +97,22 @@ exports.signUp = catchAsync(async (req, res, next) => {
 });
 
 exports.login = catchAsync(async (req, res, next) => {
-  const { email: id, password } = req.body;
+  const { user_id: id, password } = req.query;
 
   const authData = chatkit.authenticate({
     userId: id
   });
 
+  console.log(authData.body);
+
   const decoded = await promisify(jwt.verify)(
     authData.body.access_token,
     process.env.JWT_PUSHER_SECRET
   );
+  console.log(decoded);
 
   const user = await chatkit.getUser({
-    id: decoded.sub
+    id
   });
 
   if (user.custom_data.password !== password) {
@@ -137,7 +134,8 @@ exports.login = catchAsync(async (req, res, next) => {
   // Sending token
   user.token = authData.body.access_token;
 
-  createSendToken(user, 200, req, res);
+  // createSendToken(user, 200, req, res);
+  res.status(200).json(authData.body);
 });
 
 // Restricted Routes for some users
