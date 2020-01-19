@@ -36,7 +36,7 @@ const limiter = rateLimit({
 
 app.use('/v1/api/', limiter);
 
-app.options('*', cors());
+// app.options('*', cors());
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
