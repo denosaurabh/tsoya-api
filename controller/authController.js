@@ -81,7 +81,11 @@ exports.signUp = catchAsync(async (req, res, next) => {
 
   if (validation.passes()) { 
     */
-  const newUser = await chatkit.createUser(data);
+  await chatkit.createUser(data);
+
+  const authData = chatkit.authenticate({
+    userId: req.body.id
+  });
 
   const url = `${req.protocol}://${req.get('host')}/verify/${req.body.id}`;
 
@@ -90,7 +94,9 @@ exports.signUp = catchAsync(async (req, res, next) => {
     //await new Email(newUser, url).sendWelcome(url);
   }
 
-  createSendToken(newUser, 201, req, res);
+  res.status(201).json(authData.body);
+
+  //createSendToken(newUser, 201, req, res);
   /*} else {
     return next(new AppError('Please provide appropriate data', 400));
   }*/
@@ -103,13 +109,13 @@ exports.login = catchAsync(async (req, res, next) => {
     userId: id
   });
 
-  console.log(authData.body);
+  // console.log(authData.body);
 
   const decoded = await promisify(jwt.verify)(
     authData.body.access_token,
     process.env.JWT_PUSHER_SECRET
   );
-  console.log(decoded);
+  // console.log(decoded);
 
   const user = await chatkit.getUser({
     id
@@ -118,6 +124,55 @@ exports.login = catchAsync(async (req, res, next) => {
   if (user.custom_data.password !== password) {
     return next(new AppError('Email or Password is incorrect!', 404));
   }
+
+  // For Banned Users
+  if (user.custom_data.banned) {
+    return next(
+      new AppError('You are currently from this server banned!', 403)
+    );
+  }
+
+  // For Admins Fake Profiles
+  if (user.custom_data.userAdmin) {
+    return next(new AppError('This user cannot login into the Server!', 403));
+  }
+
+  // Sending token
+  user.token = authData.body.access_token;
+
+  // createSendToken(user, 200, req, res);
+  res.status(200).json(authData.body);
+});
+
+// Login with token
+exports.loginWithToken = catchAsync(async (req, res, next) => {
+  // 1) Getting token and check of it's there
+  let token;
+
+  if (req.query.token) {
+    // eslint-disable-next-line prefer-destructuring
+    token = req.query.token;
+  }
+
+  if (!token) {
+    return next(
+      new AppError('You are not logged in! Please log in to get access.', 401)
+    );
+  }
+
+  const decoded = await promisify(jwt.verify)(
+    token,
+    process.env.JWT_PUSHER_SECRET
+  );
+  // console.log(authData.body);
+
+  const authData = chatkit.authenticate({
+    userId: decoded.id
+  });
+
+  const user = await chatkit.getUser({
+    id: decoded.id
+  });
 
   // For Banned Users
   if (user.custom_data.banned) {

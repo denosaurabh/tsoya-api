@@ -20,23 +20,35 @@ const buycreditsRoute = require('./routes/purchaseCredits.routes');
 const app = express();
 
 // Middlewares
-app.enable('trust proxy');
+// app.enable('trust proxy');
 
 // Protection from Hackers
 app.use(helmet());
 app.use(xss());
-// app.use(cors());
+app.use(cors());
 
 // Limit requests from same API
 const limiter = rateLimit({
   max: 100,
-  windowMs: 60 * 60 * 1000,
+  windowMs: 60 * 1000,
   message: 'Too many requests from this IP, please try again in an hour!'
 });
 
 app.use('/v1/api/', limiter);
 
-// app.options('*', cors());
+// cors
+const whitelist = ['http://localhost:5000/'];
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (whitelist.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
+app.options('*', cors(corsOptions));
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
