@@ -14,7 +14,7 @@ router.get('/rooms', chatController.myRooms);
 router
   .route('/room/:id')
   .get(chatController.getRoom)
-  .post(chatController.uploadUserFile, chatController.sendMessage);
+  .post(chatController.sendMessage); // chatController.uploadUserFile, 
 
 router.route('/room/:id/messages').get(chatController.getMessages);
 

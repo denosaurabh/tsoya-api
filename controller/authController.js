@@ -65,22 +65,6 @@ exports.signUp = catchAsync(async (req, res, next) => {
     }
   };
 
-  /*
-  const rules = {
-    id: 'required|size:7',
-    name: 'required|size:3',
-    customData: {
-      email: 'required|email',
-      age: 'min:18'
-    }
-  };
-
-  const validation = new Validator(data, rules);
-
-  validation.errors.get();
-
-  if (validation.passes()) { 
-    */
   await chatkit.createUser(data);
 
   const authData = chatkit.authenticate({
@@ -147,31 +131,35 @@ exports.login = catchAsync(async (req, res, next) => {
 // Login with token
 exports.loginWithToken = catchAsync(async (req, res, next) => {
   // 1) Getting token and check of it's there
-  let token;
+  // let token;
 
-  if (req.query.token) {
-    // eslint-disable-next-line prefer-destructuring
-    token = req.query.token;
-  }
+  // if (
+  //   req.headers.authorization &&
+  //   req.headers.authorization.startsWith('Bearer')
+  // ) {
+  //   token = req.headers.authorization.split(' ')[1];
+  // }
 
-  if (!token) {
-    return next(
-      new AppError('You are not logged in! Please log in to get access.', 401)
-    );
-  }
+  // if (!token) {
+  //   return next(
+  //     new AppError('You are not logged in! Please log in to get access.', 401)
+  //   );
+  // }
 
-  const decoded = await promisify(jwt.verify)(
-    token,
-    process.env.JWT_PUSHER_SECRET
-  );
+  // const decoded = await promisify(jwt.verify)(
+  //   token,
+  //   process.env.JWT_PUSHER_SECRET
+  // );
   // console.log(authData.body);
+  
+  const id = req.query.user_id;
 
   const authData = chatkit.authenticate({
-    userId: decoded.id
+    userId: id
   });
 
   const user = await chatkit.getUser({
-    id: decoded.id
+    id: id
   });
 
   // For Banned Users

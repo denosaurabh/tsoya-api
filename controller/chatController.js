@@ -89,7 +89,7 @@ exports.sendMessage = catchAsync(async (req, res, next) => {
   if (req.user.custom_data.role === 'user') {
     if (req.user.custom_data.credits < 40) {
       return next(
-        new AppError('You have no enough Credits to send a message!')
+        new AppError('You have no enough Credits to send a message!', 400)
       );
     }
 
@@ -104,6 +104,7 @@ exports.sendMessage = catchAsync(async (req, res, next) => {
       }
     }
 
+    console.log('Updating user')
     // Taking out Credits (only for Users, not Admins or Owners)
     await chatkit.updateUser({
       id: req.user.id,
@@ -174,7 +175,7 @@ exports.getMessages = catchAsync(async (req, res, next) => {
   const messages = await chatkit.fetchMultipartMessages({
     roomId: req.params.id,
     limit: 10,
-    direction: 'older'
+    direction: 'newer'
   });
 
   res.status(200).json({

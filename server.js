@@ -27,7 +27,7 @@ process.on('uncaughtException', err => {
 
 const port = process.env.PORT || 4000;
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`App is listening for requests on port ${port} ....`);
 });
 

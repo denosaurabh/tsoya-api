@@ -4,6 +4,7 @@
   "description": "Tsoya Backend API with Pusher ChatKit",
   "main": "app.js",
   "scripts": {
+    "dev": "nodemon server",
     "start": "node server",
     "start:prod": "set NODE_ENV=production&& node server.js"
   },
