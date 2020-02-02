@@ -85,33 +85,67 @@ exports.makeUsers = catchAsync(async (req, res, next) => {
 
 // Login with Fake Profiles
 exports.loginwithFakeProfile = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-
-  const fakeUser = await chatkit.getUser({ id });
-
-  if (fakeUser.custom_data.userAdmin !== req.user.id) {
-    return next(new AppError('This user is not your Fake Profiles'));
-  }
+  const id = req.query.user_id;
+  const adminID = req.query.adminId;
 
   const authData = chatkit.authenticate({
     userId: id
   });
 
-  const decoded = await promisify(jwt.verify)(
-    authData.body.access_token,
-    process.env.JWT_PUSHER_SECRET
-  );
-
   const user = await chatkit.getUser({
-    id: decoded.sub
+    id: id
   });
 
+  // For Banned Users
+  if (user.custom_data.banned) {
+    return next(
+      new AppError('You are currently from this server banned!', 403)
+    );
+  }
+
+  // For Admins Fake Profiles
+  if (user.custom_data.userAdmin !== adminID) {
+    return next(
+      new AppError(
+        'Seems like this User is not your one of Fake Profiles!',
+        403
+      )
+    );
+  }
+
   // Sending token
-  // req.fakeUser = user;
-  // req.fakeUser.admin = req.user.id;
   user.token = authData.body.access_token;
 
-  createSendToken(user, 200, req, res, authData.body.access_token);
+  // createSendToken(user, 200, req, res);
+  res.status(200).json(authData.body);
+
+  // const { id } = req.params;
+
+  // const fakeUser = await chatkit.getUser({ id });
+
+  // if (fakeUser.custom_data.userAdmin !== req.user.id) {
+  //   return next(new AppError('This user is not your Fake Profiles'));
+  // }
+
+  // const authData = chatkit.authenticate({
+  //   userId: id
+  // });
+
+  // const decoded = await promisify(jwt.verify)(
+  //   authData.body.access_token,
+  //   process.env.JWT_PUSHER_SECRET
+  // );
+
+  // const user = await chatkit.getUser({
+  //   id: decoded.sub
+  // });
+
+  // // Sending token
+  // // req.fakeUser = user;
+  // // req.fakeUser.admin = req.user.id;
+  // user.token = authData.body.access_token;
+
+  // createSendToken(user, 200, req, res, authData.body.access_token);
 });
 
 // Log back to Admin if the Admin Fake User is loged In

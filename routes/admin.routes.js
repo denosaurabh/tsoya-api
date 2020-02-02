@@ -16,7 +16,7 @@ router
   .get(adminController.myFakeProfiles)
   .post(adminController.makeUsers);
 
-router.route('/profiles/:id').get(adminController.loginwithFakeProfile);
+router.route('/profiles/:id').post(adminController.loginwithFakeProfile);
 
 router
   .route('/profile/:id')

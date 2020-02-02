@@ -128,30 +128,11 @@ exports.login = catchAsync(async (req, res, next) => {
   res.status(200).json(authData.body);
 });
 
-// Login with token
-exports.loginWithToken = catchAsync(async (req, res, next) => {
+// Login with ID
+exports.loginWithID = catchAsync(async (req, res, next) => {
   // 1) Getting token and check of it's there
   // let token;
 
-  // if (
-  //   req.headers.authorization &&
-  //   req.headers.authorization.startsWith('Bearer')
-  // ) {
-  //   token = req.headers.authorization.split(' ')[1];
-  // }
-
-  // if (!token) {
-  //   return next(
-  //     new AppError('You are not logged in! Please log in to get access.', 401)
-  //   );
-  // }
-
-  // const decoded = await promisify(jwt.verify)(
-  //   token,
-  //   process.env.JWT_PUSHER_SECRET
-  // );
-  // console.log(authData.body);
-  
   const id = req.query.user_id;
 
   const authData = chatkit.authenticate({
