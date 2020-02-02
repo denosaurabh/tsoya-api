@@ -61,7 +61,7 @@ exports.signUp = catchAsync(async (req, res, next) => {
       gender: req.body.gender,
       age: req.body.age,
       credits: 120,
-      role: 'user'
+      role: 'owner'
     }
   };
 

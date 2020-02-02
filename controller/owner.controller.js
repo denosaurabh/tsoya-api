@@ -39,7 +39,7 @@ exports.allAdmins = catchAsync(async (req, res, next) => {
 exports.createAdmin = catchAsync(async (req, res, next) => {
   const user = await chatkit.createUser({
     id: req.body.id,
-    name: req.body.name,
+    name: req.body.id,
     customData: {
       email: req.body.email,
       password: req.body.password,

@@ -59,18 +59,19 @@ exports.myFakeProfiles = catchAsync(async (req, res, next) => {
 });
 
 exports.makeUsers = catchAsync(async (req, res, next) => {
-  const { id, name, age, gender, about, sexDetermination } = req.body;
+  const { id, age, email, gender, about, sexDetermination } = req.body;
 
   const user = await chatkit.createUser({
     id,
-    name,
+    name: id,
     customData: {
       age,
       gender,
       about,
+      email,
       sexDetermination,
       userAdmin: req.user.id,
-      role: 'user',
+      role: 'admin',
       credits: 'unlimited'
     }
   });
@@ -85,7 +86,13 @@ exports.makeUsers = catchAsync(async (req, res, next) => {
 
 // Login with Fake Profiles
 exports.loginwithFakeProfile = catchAsync(async (req, res, next) => {
-  const id = req.query.user_id;
+  let id = req.query.user_id;
+
+  if (!id) {
+    // eslint-disable-next-line prefer-destructuring
+    id = req.params.id;
+  }
+
   const adminID = req.query.adminId;
 
   const authData = chatkit.authenticate({
@@ -119,33 +126,6 @@ exports.loginwithFakeProfile = catchAsync(async (req, res, next) => {
   // createSendToken(user, 200, req, res);
   res.status(200).json(authData.body);
 
-  // const { id } = req.params;
-
-  // const fakeUser = await chatkit.getUser({ id });
-
-  // if (fakeUser.custom_data.userAdmin !== req.user.id) {
-  //   return next(new AppError('This user is not your Fake Profiles'));
-  // }
-
-  // const authData = chatkit.authenticate({
-  //   userId: id
-  // });
-
-  // const decoded = await promisify(jwt.verify)(
-  //   authData.body.access_token,
-  //   process.env.JWT_PUSHER_SECRET
-  // );
-
-  // const user = await chatkit.getUser({
-  //   id: decoded.sub
-  // });
-
-  // // Sending token
-  // // req.fakeUser = user;
-  // // req.fakeUser.admin = req.user.id;
-  // user.token = authData.body.access_token;
-
-  // createSendToken(user, 200, req, res, authData.body.access_token);
 });
 
 // Log back to Admin if the Admin Fake User is loged In
