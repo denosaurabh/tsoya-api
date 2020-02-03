@@ -125,39 +125,40 @@ exports.loginwithFakeProfile = catchAsync(async (req, res, next) => {
 
   // createSendToken(user, 200, req, res);
   res.status(200).json(authData.body);
-
 });
 
 // Log back to Admin if the Admin Fake User is loged In
 exports.loginInBackToAdmin = catchAsync(async (req, res, next) => {
-  if (!req.fakeUser) {
-    return next(new AppError('There is no admin fake user logged in!', 404));
-  }
+  // if (!req.fakeUser) {
+  //   return next(new AppError('There is no admin fake user logged in!', 404));
+  // }
 
-  const { userAdmin } = req.fakeUser.custom_data;
+  const adminID = req.query.id;
 
-  if (!userAdmin) {
+  if (!adminID) {
     return next(new AppError('This user is not one of your Fake users!', 403));
   }
 
   const authData = chatkit.authenticate({
-    userId: userAdmin
+    userId: adminID
   });
 
-  const decoded = await promisify(jwt.verify)(
-    authData.body.access_token,
-    process.env.JWT_PUSHER_SECRET
-  );
+  res.status(200).json(authData.body);
 
-  const user = await chatkit.getUser({
-    id: decoded.sub
-  });
+  // const decoded = await promisify(jwt.verify)(
+  //   authData.body.access_token,
+  //   process.env.JWT_PUSHER_SECRET
+  // );
 
-  // Sending token
-  req.user = user;
-  user.token = authData.body.access_token;
+  // const user = await chatkit.getUser({
+  //   id: decoded.sub
+  // });
 
-  createSendToken(user, 200, req, res, authData.body.access_token);
+  // // Sending token
+  // req.user = user;
+  // user.token = authData.body.access_token;
+
+  // createSendToken(user, 200, req, res, authData.body.access_token);
 });
 
 // Protecting
@@ -256,7 +257,7 @@ exports.transferFakeUser = catchAsync(async (req, res, next) => {
 
   const message = await chatkit.sendSimpleMessage({
     userId: req.user.id,
-    roomId: '66520afe-e8a5-4058-b649-c71287be717d',
+    roomId: '384cdb90-4d82-4f04-bb95-b3dd0818d798',
     text: `${JSON.stringify(user)}`
   });
 

@@ -7,9 +7,7 @@ const router = express.Router();
 
 router.use(authController.protect, authController.restrictTo('admin'));
 
-router
-  .route('/logback')
-  .get(adminController.protectFakeProfile, adminController.loginInBackToAdmin);
+router.route('/logback').post(adminController.loginInBackToAdmin); // adminController.protectFakeProfile
 
 router
   .route('/profiles')

@@ -24,7 +24,7 @@ exports.allAdmins = catchAsync(async (req, res, next) => {
   const allUsers = await chatkit.getUsers();
 
   const filteringAdmins = allUsers.filter(el => {
-    if (el.custom_data.role === 'admin') {
+    if (el.custom_data.role === 'admin' && !el.custom_data.userAdmin) {
       return el;
     }
   });
