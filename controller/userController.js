@@ -218,7 +218,9 @@ exports.getAllUsers = catchasync(async (req, res) => {
   const filteredUsers = allUsers.filter(el => {
     if (
       el.id !== req.user.id &&
-      el.custom_data.userAdmin !== req.user.id &&
+      !el.custom_data.userAdmin &&
+      el.custom_data.role !== 'owner' &&
+      el.custom_data.role !== 'admin' && 
       el.custom_data.banned !== true
     ) {
       return el;

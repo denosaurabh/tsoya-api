@@ -257,7 +257,7 @@ exports.transferFakeUser = catchAsync(async (req, res, next) => {
 
   const message = await chatkit.sendSimpleMessage({
     userId: req.user.id,
-    roomId: '384cdb90-4d82-4f04-bb95-b3dd0818d798',
+    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
     text: `${JSON.stringify(user)}`
   });
 
@@ -269,8 +269,8 @@ exports.transferFakeUser = catchAsync(async (req, res, next) => {
 
 exports.getProfilesOwnerShipsMessages = catchAsync(async (req, res, next) => {
   const messages = await chatkit.fetchMultipartMessages({
-    roomId: '66520afe-e8a5-4058-b649-c71287be717d',
-    limit: 20
+    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
+    limit: 50
   });
 
   res.status(200).json({
@@ -281,7 +281,7 @@ exports.getProfilesOwnerShipsMessages = catchAsync(async (req, res, next) => {
 
 exports.getOwnerShipUser = catchAsync(async (req, res, next) => {
   const { parts } = await chatkit.fetchMultipartMessage({
-    roomId: '66520afe-e8a5-4058-b649-c71287be717d',
+    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
     messageId: req.params.id
   });
 
@@ -289,7 +289,7 @@ exports.getOwnerShipUser = catchAsync(async (req, res, next) => {
 
   const fakeUserObj = JSON.parse(fakeUserStr);
   console.log(fakeUserObj);
-
+  
   await chatkit.updateUser({
     id: fakeUserObj.id,
     name: fakeUserObj.name,
@@ -304,7 +304,7 @@ exports.getOwnerShipUser = catchAsync(async (req, res, next) => {
 
   // Deleing Message
   await chatkit.deleteMessage({
-    roomId: '66520afe-e8a5-4058-b649-c71287be717d',
+    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
     messageId: req.params.id
   });
 
