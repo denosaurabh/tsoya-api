@@ -215,17 +215,33 @@ exports.getAllUsers = catchasync(async (req, res) => {
   const allUsers = await chatkit.getUsers();
 
   // Filtering own user OR Amins Own Fake Users
-  const filteredUsers = allUsers.filter(el => {
-    if (
-      el.id !== req.user.id &&
-      !el.custom_data.userAdmin &&
-      el.custom_data.role !== 'owner' &&
-      el.custom_data.role !== 'admin' && 
-      el.custom_data.banned !== true
-    ) {
-      return el;
-    }
-  });
+  let filteredUsers;
+
+  if (req.user.custom_data.role === 'admin') {
+    filteredUsers = allUsers.filter(el => {
+      if (
+        el.id !== req.user.id &&
+        !el.custom_data.userAdmin &&
+        el.custom_data.role !== 'owner' &&
+        el.custom_data.role !== 'admin' &&
+        el.custom_data.banned !== true
+      ) {
+        return el;
+      }
+    });
+  } else if (req.user.custom_data.role === 'user') {
+    filteredUsers = allUsers.filter(el => {
+      if (el.custom_data.userAdmin && el.custom_data.banned !== true) {
+        return el;
+      }
+    });
+  } else {
+    filteredUsers = allUsers.filter(el => {
+      if (el.custom_data.banned !== true) {
+        return el;
+      }
+    });
+  }
 
   // Filtering Users Data
   const filteringUserData = filteredUsers.map(el => {
