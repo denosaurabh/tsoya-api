@@ -25,7 +25,7 @@ const app = express();
 // app.use(cors());
 // app.options('*', cors());
 app.use(cors());
-const whitelist = ['http://localhost:5000/'];
+const whitelist = ['https://present-pie.surge.sh/'];
 const corsOptions = {
   origin: function(origin, callback) {
     if (whitelist.indexOf(origin) !== -1) {
