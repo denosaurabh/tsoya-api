@@ -4,7 +4,7 @@ const AppError = require('../utils/appError');
 
 exports.getCheckoutSession = catchAsync(async (req, res, next) => {
   const noOfCredits = req.params.noCredits;
-  const userId = req.user.id;
+  const userId = req.user._id;
 
   let amount;
   if (noOfCredits === '200') amount = 19;
@@ -20,8 +20,7 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
     payment_method_types: ['card'],
     success_url: `${req.protocol}://${req.get('host')}/`,
     cancel_url: `${req.protocol}://${req.get('host')}/me`,
-    customer_email: req.user.custom_data.email,
-    client_reference_id: req.user.id,
+    customer_email: req.user.email,
     line_items: [
       {
         name: `${noOfCredits} credits, ${req.user.name}`,

@@ -1,34 +1,23 @@
-const rateLimit = require('express-rate-limit');
-const Validator = require('validatorjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { promisify } = require('util');
 
-const chatkit = require('../utils/chatkit');
+const User = require('../models/user.model');
+
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
-const Email = require('../utils/email');
-
-exports.signUplimiter = rateLimit({
-  max: 4,
-  windowMs: 31536000 * 1000,
-  message: 'A user can only sign up once!'
-});
+const chatkit = require('../utils/chatkit');
 
 const signToken = id => {
-  const jsonPayload = {
-    instance: process.env.PUSHER_INSTANCE_ID,
-    iss: process.env.PUSHER_KEY_ID,
-    iat: Date.now(),
-    exp: Date.now() + 3600,
-    sub: id
-  };
+  console.log(process.env.JWT_SECRET);
 
-  return jwt.sign(jsonPayload, process.env.JWT_SECRET);
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN
+  });
 };
 
 const createSendToken = (user, statusCode, req, res) => {
-  const token = signToken(user.id);
+  const token = signToken(user._id);
 
   res.cookie('jwt', token, {
     expires: new Date(
@@ -40,139 +29,133 @@ const createSendToken = (user, statusCode, req, res) => {
 
   // Remove password from output
   user.password = undefined;
+  user.referalLinkAdmin = undefined;
+  user.disableMiddlewareHooks = undefined;
+  user.userAdmin = undefined;
+
+  // Including Chatkit Auth
+  const authData = chatkit.authenticate({
+    userId: user.name
+  });
 
   res.status(statusCode).json({
     status: 'success',
     token,
+    chatToken: authData.body,
     data: {
       user
     }
   });
 };
 
-// Pusher SignUp
-exports.signUp = catchAsync(async (req, res, next) => {
-  const data = {
-    id: req.body.id,
-    name: req.body.name,
-    customData: {
-      email: req.body.email,
-      password: req.body.password,
-      gender: req.body.gender,
-      age: req.body.age,
-      credits: 120,
-      role: 'user'
-    }
-  };
+// SAMLL MIDDLEWARE FOR REFERAL LINK USERS
+exports.referalLink = (req, res, next) => {
+  if (!req.params.link) next();
 
-  await chatkit.createUser(data);
+  req.body.referalLinkAdmin = req.params.link;
+};
+
+// User SignUp
+exports.signUp = catchAsync(async (req, res, next) => {
+  console.log(req.body);
+
+  const newUser = await User.create({
+    name: req.body.name,
+    email: req.body.email,
+    password: req.body.password,
+    gender: req.body.gender,
+    age: req.body.age,
+    credits: 120,
+    referalLinkAdmin: req.body.referalLinkAdmin
+  });
+  console.log(newUser)
+
+  await chatkit.createUser({
+    id: req.body.name,
+    name: req.body.name
+  });
 
   const authData = chatkit.authenticate({
     userId: req.body.id
   });
 
-  const url = `${req.protocol}://${req.get('host')}/verify/${req.body.id}`;
+  // Including Chatkit Token
+  newUser.chatAuth = authData.body;
 
-  // Sending Mail
-  if (process.env.NODE_ENV === 'production') {
-    //await new Email(newUser, url).sendWelcome(url);
-  }
+  // await new Email(newUser, url).sendWelcome();
 
-  res.status(201).json(authData.body);
-
-  //createSendToken(newUser, 201, req, res);
-  /*} else {
-    return next(new AppError('Please provide appropriate data', 400));
-  }*/
+  createSendToken(newUser, 201, req, res);
 });
 
 exports.login = catchAsync(async (req, res, next) => {
-  const { user_id: id, password } = req.query;
+  const { id, password } = req.query;
 
-  const authData = chatkit.authenticate({
-    userId: id
-  });
-
-  // console.log(authData.body);
-
-  const decoded = await promisify(jwt.verify)(
-    authData.body.access_token,
-    process.env.JWT_PUSHER_SECRET
-  );
-  // console.log(decoded);
-
-  const user = await chatkit.getUser({
-    id
-  });
-
-  if (user.custom_data.password !== password) {
-    return next(new AppError('Email or Password is incorrect!', 404));
+  if (!id || !password) {
+    return next(new AppError('Please provide id and password!', 400));
   }
 
-  // For Banned Users
-  if (user.custom_data.banned) {
-    return next(
-      new AppError('You are currently from this server banned!', 403)
-    );
+  const user = await User.findOne({ name: id }).select('+password');
+  console.log(user);
+
+  if (!user || !(await user.correctPassword(password, user.password))) {
+    console.log('Incorred!!');
+    return next(new AppError('Incorrect id or password', 401));
   }
 
-  // For Admins Fake Profiles
-  if (user.custom_data.userAdmin) {
-    return next(new AppError('This user cannot login into the Server!', 403));
+  // For Banned Admins
+  if (user.banned) {
+    return next(new AppError('You are banned from the Server!', 403));
   }
 
-  // Sending token
-  user.token = authData.body.access_token;
+  console.log('logged');
 
-  // createSendToken(user, 200, req, res);
-  res.status(200).json(authData.body);
+  createSendToken(user, 200, req, res);
 });
 
-// Login with ID
-exports.loginWithID = catchAsync(async (req, res, next) => {
-  // 1) Getting token and check of it's there
-  // let token;
+exports.chatLogin = catchAsync(async (req, res, next) => {
+  let token;
 
-  const id = req.query.user_id;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies.jwt) {
+    token = req.cookies.jwt;
+  }
 
-  const authData = chatkit.authenticate({
-    userId: id
-  });
-
-  const user = await chatkit.getUser({
-    id: id
-  });
-
-  // For Banned Users
-  if (user.custom_data.banned) {
+  if (!token) {
     return next(
-      new AppError('You are currently from this server banned!', 403)
+      new AppError('You are not logged in! Please log in to get access.', 401)
     );
   }
 
-  // For Admins Fake Profiles
-  if (user.custom_data.userAdmin) {
-    return next(new AppError('This user cannot login into the Server!', 403));
+  // 2) Verification token
+  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+
+  // 3) Check if user still exists
+  const currentUser = await User.findById(decoded.id);
+  if (!currentUser) {
+    return next(
+      new AppError(
+        'The user belonging to this token does no longer exist.',
+        401
+      )
+    );
   }
 
-  // Sending token
-  user.token = authData.body.access_token;
+  const authData = chatkit.authenticate({
+    userId: currentUser.name
+  });
 
-  // createSendToken(user, 200, req, res);
   res.status(200).json(authData.body);
 });
 
 // Restricted Routes for some users
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
-    if (req.originalUrl === '/v1/api/admin/logback') {
-      if (req.user.custom_data.userAdmin) {
-        return next();
-      }
-    }
-
     // roles ['owner', 'admin']. role='user'
-    if (!roles.includes(req.user.custom_data.role)) {
+    if (!roles.includes(req.user.role)) {
       return next(
         new AppError('You do not have permission to perform this action', 403)
       );
@@ -184,55 +167,31 @@ exports.restrictTo = (...roles) => {
 
 // Forgot Password
 exports.forgotPassword = catchAsync(async (req, res, next) => {
-  const user = await chatkit.getUser({ id: req.body.name });
-
+  const user = await User.findOne({ email: req.body.email });
   if (!user) {
-    return next(new AppError('There is no user with name.', 404));
+    return next(new AppError('There is no user with email address.', 404));
   }
 
   // 2) Generate the random reset token
-  const resetTokenByte = crypto.randomBytes(32).toString('hex');
-  const resetToken = `${resetTokenByte}$_$${user.id}`;
-
-  const passwordResetToken = crypto
-    .createHash('sha256')
-    .update(resetTokenByte)
-    .digest('hex');
-
-  // console.log({ resetToken }, this.passwordResetToken);
-
-  const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-  // 3) Saving to User data
-  await chatkit.updateUser({
-    id: req.body.name,
-    name: user.name,
-    avatarURL: user.avatarURL,
-    customData: {
-      ...user.custom_data,
-      passwordResetToken,
-      passwordResetExpires
-    }
-  });
+  const resetToken = user.createPasswordResetToken();
+  await user.save({ validateBeforeSave: false });
 
   // 3) Send it to user's email
   try {
     const resetURL = `${req.protocol}://${req.get(
       'host'
     )}/api/v1/users/resetPassword/${resetToken}`;
-
-    // Sending Email
-    console.log(resetURL);
-
-    if (process.env.NODE_ENV === 'production') {
-      await new Email(user, resetURL).sendPasswordReset(resetURL);
-    }
+    // await new Email(user, resetURL).sendPasswordReset();
 
     res.status(200).json({
       status: 'success',
       message: `Token sent to email! ${resetURL}`
     });
   } catch (err) {
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+
     return next(
       new AppError('There was an error sending the email. Try again later!'),
       500
@@ -245,48 +204,26 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
   // 1) Get user based on the token
   const hashedToken = crypto
     .createHash('sha256')
-    .update(req.params.token.split('$_$')[0])
+    .update(req.params.token)
     .digest('hex');
 
-  const userId = req.params.token.split('$_$')[1];
-
-  const user = await chatkit.getUser({ id: userId });
-
-  // await chatkit.updateUser({
-  //   id: userId,
-  //   name: user.name,
-  //   avatarURL: user.avatarURL,
-  //   customData: {
-  //     passwordResetToken: hashedToken,
-  //     passwordResetExpires: { $gt: Date.now() }
-  //   }
-  // });
-
-  console.log(user.custom_data.passwordResetToken, hashedToken);
-  if (
-    user.custom_data.passwordResetToken != hashedToken ||
-    user.custom_data.passwordResetExpires < Date.now()
-  ) {
-    return next(new AppError('Expired or Wrong Token! Please try again', 400));
-  }
-
-  // Updating User
-  await chatkit.updateUser({
-    id: userId,
-    name: user.name,
-    avatarURL: user.avatarURL,
-    customData: {
-      ...user.custom_data,
-      password: req.body.password,
-      passwordResetExpires: undefined,
-      passwordResetToken: undefined
-    }
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: Date.now() }
   });
 
-  const updatedPasswordUser = await chatkit.getUser({ id: userId });
+  // 2) If token has not expired, and there is user, set the new password
+  if (!user) {
+    return next(new AppError('Token is invalid or has expired', 400));
+  }
+  user.password = req.body.password;
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+  await user.save();
 
+  // 3) Update changedPasswordAt property for the user
   // 4) Log the user in
-  createSendToken(updatedPasswordUser, 200, req, res);
+  createSendToken(user, 200, req, res);
 });
 
 // Protecting Endpoints for some users
@@ -309,24 +246,58 @@ exports.protect = catchAsync(async (req, res, next) => {
     );
   }
 
-  const decoded = await promisify(jwt.verify)(
-    token,
-    process.env.JWT_PUSHER_SECRET
-  );
+  // 2) Verification token
+  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
 
-  const user = await chatkit.getUser({
-    id: decoded.sub
-  });
+  // 3) Check if user still exists
+  const currentUser = await User.findById(decoded.id);
+  if (!currentUser) {
+    return next(
+      new AppError(
+        'The user belonging to this token does no longer exist.',
+        401
+      )
+    );
+  }
 
-  req.user = user;
-  // req.locals.user = user;
+  // 4) Check if user changed password after the token was issued
+  if (currentUser.changedPasswordAfter(decoded.iat)) {
+    return next(
+      new AppError('User has changed password! Please log in again!', 401)
+    );
+  }
 
+  // GRANT ACCESS TO PROTECTED ROUTE
+  req.user = currentUser;
+  res.locals.user = currentUser;
   next();
 });
 
-// SAMLL MIDDLEWARE FOR REFERAL LINK USERS
-exports.referalLink = (req, res, next) => {
-  if (!req.params.link) next();
+exports.isLoggedIn = async (req, res, next) => {
+  if (req.cookies.jwt) {
+    try {
+      // 1) verify token
+      const decoded = await promisify(jwt.verify)(
+        req.cookies.jwt,
+        process.env.JWT_SECRET
+      );
 
-  req.body.referalLinkAdmin = req.params.link;
+      // 2) Check if user still exists
+      const currentUser = await User.findById(decoded.id);
+      if (!currentUser) {
+        return next();
+      }
+
+      // 3) Check if user changed password after the token was issued
+      if (currentUser.changedPasswordAfter(decoded.iat)) {
+        return next();
+      }
+
+      res.locals.user = currentUser;
+      return next();
+    } catch (err) {
+      return next();
+    }
+  }
+  next();
 };

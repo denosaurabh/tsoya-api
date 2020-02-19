@@ -19,27 +19,6 @@ const handleValidationErrorDB = err => {
   return new AppError(message, 400);
 };
 
-const handleConnectReset = err => {
-  const message =
-    'Seems like Something went srong with the Internet Connection! PLease try again later';
-  return new AppError(message, 500);
-};
-
-const handleUserNotFound = err => {
-  const message = `User not found! Please check again`;
-  return new AppError(message, 404);
-};
-
-const handleValidationerrPusher = err => {
-  const message = `Invalid data send!`;
-  return new AppError(message, 400);
-};
-
-const handleNoRoom = () => {
-  const message = `No room found with this ID!`;
-  return new AppError(message, 404);
-};
-
 const sendErrorDev = (err, req, res) => {
   // A) API
   return res.status(err.statusCode).json({
@@ -52,7 +31,7 @@ const sendErrorDev = (err, req, res) => {
 
 const sendErrorProd = (err, req, res) => {
   // A) API
-  if (req.originalUrl.startsWith('/v1/api')) {
+  if (req.originalUrl.startsWith('/api')) {
     // A) Operational, trusted error: send message to client
     if (err.isOperational) {
       return res.status(err.statusCode).json({
@@ -66,23 +45,26 @@ const sendErrorProd = (err, req, res) => {
     // 2) Send generic message
     return res.status(500).json({
       status: 'error',
-      message: err.error_description
+      message: 'Something went very wrong!'
     });
   }
 
   // B) RENDERED WEBSITE
   // A) Operational, trusted error: send message to client
   if (err.isOperational) {
-    return new AppError('Something went wrong!', 500);
+    return res.status(err.statusCode).render('error', {
+      title: 'Something went wrong!',
+      msg: err.message
+    });
   }
   // B) Programming or other unknown error: don't leak error details
   // 1) Log error
   console.error('ERROR 💥', err);
   // 2) Send generic message
-  return new AppError(
-    'Error, Something went wrong! Please try again later.',
-    err.statusCode
-  );
+  return res.status(err.statusCode).render('error', {
+    title: 'Something went wrong!',
+    msg: 'Please try again later.'
+  });
 };
 
 module.exports = (err, req, res, next) => {
@@ -90,8 +72,6 @@ module.exports = (err, req, res, next) => {
 
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
-
-  console.log(err);
 
   if (process.env.NODE_ENV === 'development') {
     sendErrorDev(err, req, res);
@@ -101,21 +81,8 @@ module.exports = (err, req, res, next) => {
 
     if (error.name === 'CastError') error = handleCastErrorDB(error);
     if (error.code === 11000) error = handleDuplicateFieldsDB(error);
-    if (error.code === 'ECONNRESET' || error.code === 'ENOTFOUND')
-      handleConnectReset(error);
-    //if (error.error === 'services/chatkit/not_found/user_not_found') handleUserNotFound(error);
-    if (
-      error.error_uri ===
-      'https://docs.pusher.com/errors/services/chatkit/bad_request/validation_failed'
-    ) {
-      handleValidationerrPusher(error);
-    }
-    if (
-      error.error_uri ===
-      'https://docs.pusher.com/errors/services/chatkit/not_found/room_not_found'
-    )
-      if (error.name === 'ValidationError')
-        error = handleValidationErrorDB(error);
+    if (error.name === 'ValidationError')
+      error = handleValidationErrorDB(error);
 
     sendErrorProd(error, req, res);
   }

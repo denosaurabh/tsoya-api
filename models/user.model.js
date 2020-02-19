@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const validator = require('validator');
 const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
@@ -14,20 +15,21 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'User email is required'],
-    unique: true
+    unique: true,
+    validate: [validator.isEmail, 'Please provide a valid Email!']
   },
   password: {
     type: String,
-    required: [true, 'User password is required']
+    required: [true, 'User password is required!']
   },
   gender: {
     type: String,
     enum: ['male', 'female'],
-    required: [true, 'User name is required']
+    required: [true, 'User gender is required!']
   },
   age: {
     type: Number,
-    required: [true, 'User name is required'],
+    required: [true, 'User age is required!'],
     validate: {
       validator: function(val) {
         return val > 18;
@@ -51,9 +53,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['Homosexual', 'Hetrosexual', 'Bisexual']
   },
-  photo: {
+  imageCover: {
     type: String
   },
+  publicImages: [String],
+  privateImages: [String],
   favourites: [
     {
       type: mongoose.Schema.ObjectId,
@@ -62,9 +66,14 @@ const userSchema = new mongoose.Schema({
   ],
   role: {
     type: String,
+    enum: ['user', 'admin', 'owner'],
     default: 'user'
   },
   userAdmin: {
+    type: String,
+    default: null
+  },
+  referalLinkAdmin: {
     type: String,
     default: null
   },
@@ -72,7 +81,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  online: Boolean,
+  online: { type: Boolean, default: false },
   banned: { type: Boolean, default: false },
   banTime: Date,
   passwordChangedAt: Date,
@@ -88,11 +97,11 @@ userSchema.pre('save', async function(next) {
    These are because the Users made by Admins have not passwords and other things. So, disabling all the Middlewares to execute if the User is made by admin 
   */
 
-  if (this.disableMiddlewareHooks) {
+  if (this.userAdmin) {
+    this.password = undefined;
     console.log('PRE SAVE Hooks executes');
     return next();
   }
-
   // Only run this function if password was actually modified
   if (!this.isModified('password')) return next();
 
@@ -101,14 +110,14 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-userSchema.pre('save', function(next) {
-  if (this.disableMiddlewareHooks) return next();
+// userSchema.pre('save', function(next) {
+//   if (this.disableMiddlewareHooks) return next();
 
-  if (!this.isModified('password') || this.isNew) return next();
+//   if (!this.isModified('password') || this.isNew) return next();
 
-  this.passwordChangedAt = Date.now() - 1000;
-  next();
-});
+//   this.passwordChangedAt = Date.now() - 1000;
+//   next();
+// });
 
 userSchema.pre('save', function(next) {
   if (this.disableMiddlewareHooks) return next();

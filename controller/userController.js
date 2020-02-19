@@ -1,6 +1,7 @@
 const multer = require('multer');
 const sharp = require('sharp');
-const chatkit = require('../utils/chatkit');
+const User = require('../models/user.model');
+const factoryHandlers = require('./factoryController');
 const catchasync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 
@@ -27,64 +28,57 @@ exports.uploadUserImages = upload.fields([
 ]);
 
 exports.resizeUserImages = catchasync(async (req, res, next) => {
-  // Getting user data
-  const user = await chatkit.getUser({ id: req.params.id });
+  if (
+    !req.files.imageCover ||
+    !req.files.publicImages ||
+    !req.files.privateImages
+  )
+    return next();
 
-  if (req.files.imageCover) {
-    // 1) Cover image
-    req.body.imageCover = `user-${req.user.id}-${Date.now()}-cover.jpeg`;
+  // 1) Cover image
+  req.body.imageCover = `user-${req.user._id}-${Date.now()}-cover.jpeg`;
 
-    await sharp(req.files.imageCover[0].buffer)
-      .resize(2000, 1333)
-      .toFormat('jpeg')
-      .jpeg({ quality: 90 })
-      .toFile(`public/img/users/${req.body.imageCover}`);
-  }
+  await sharp(req.files.imageCover[0].buffer)
+    .resize(2000, 1333)
+    .toFormat('jpeg')
+    .jpeg({ quality: 90 })
+    .toFile(`public/images/users/${req.body.imageCover}`);
 
   // 2) Public and Private Images
+  req.body.publicImages = [];
+  req.body.privateImages = [];
 
   // Public Images
-  if (req.files.publicImages) {
-    req.body.publicImages = [];
+  await Promise.all(
+    req.files.publicImages.map(async (file, i) => {
+      const filename = `user-${req.user._id}-${Date.now()}-${i +
+        1}-public.jpeg`;
 
-    await Promise.all(
-      req.files.publicImages.map(async (file, i) => {
-        const filename = `user-${req.user.id}-${Date.now()}-${i +
-          1}-public.jpeg`;
+      await sharp(file.buffer)
+        .resize(2000, 1333)
+        .toFormat('jpeg')
+        .jpeg({ quality: 90 })
+        .toFile(`public/images/users/${filename}`);
 
-        await sharp(file.buffer)
-          .resize(2000, 1333)
-          .toFormat('jpeg')
-          .jpeg({ quality: 90 })
-          .toFile(`public/img/users/${filename}`);
+      req.body.publicImages.push(filename);
+    })
+  );
 
-        req.body.publicImages.push(filename);
-        console.log(user.custom_data.publicImages);
-
-        // req.body.publicImages = user.custom_data.publicImages.push(filename);
-      })
-    );
-  }
   // Private Images
-  if (req.files.privateImages) {
-    req.body.privateImages = [];
+  await Promise.all(
+    req.files.privateImages.map(async (file, i) => {
+      const filename = `user-${req.user._id}-${Date.now()}-${i +
+        1}-private.jpeg`;
 
-    await Promise.all(
-      req.files.privateImages.map(async (file, i) => {
-        const filename = `user-${req.user.id}-${Date.now()}-${i +
-          1}-private.jpeg`;
+      await sharp(file.buffer)
+        .resize(2000, 1333)
+        .toFormat('jpeg')
+        .jpeg({ quality: 90 })
+        .toFile(`public/images/users/${filename}`);
 
-        await sharp(file.buffer)
-          .resize(2000, 1333)
-          .toFormat('jpeg')
-          .jpeg({ quality: 90 })
-          .toFile(`public/img/users/${filename}`);
-
-        req.body.privateImages.push(filename);
-        // req.body.privateImages = user.custom_data.privateImages.push(filename);
-      })
-    );
-  }
+      req.body.privateImages.push(filename);
+    })
+  );
 
   next();
 });
@@ -111,26 +105,21 @@ exports.updateMe = catchasync(async (req, res, next) => {
 
   const filteredBody = filterObj(
     req.body,
+    'name',
     'email',
     'male',
     'age',
     'sexOrientation',
+    'about',
     'imageCover',
     'publicImages',
-    'privateImages',
-    'about'
+    'privateImages'
   );
 
-  await chatkit.updateUser({
-    id: req.user.id,
-    name: req.body.name || req.user.name,
-    customData: {
-      ...req.user.custom_data,
-      ...filteredBody
-    }
+  const updatedUser = await User.findByIdAndUpdate(req.user.id, filteredBody, {
+    new: true,
+    runValidators: true
   });
-
-  const updatedUser = await chatkit.getUser({ id: req.params.id });
 
   res.status(200).json({
     status: 'success',
@@ -143,50 +132,28 @@ exports.updateMe = catchasync(async (req, res, next) => {
 exports.favouriteUser = catchasync(async (req, res, next) => {
   const userId = req.user.id;
   const favouriteUserId = req.params.id;
+  console.log(userId, favouriteUserId);
 
-  await chatkit.getUser({ id: favouriteUserId });
+  const userFavourites = await User.findById(userId).select('favorites');
 
-  const user = await chatkit.getUser({ id: userId });
+  // if (userFavourites === favouriteUserId) {
+  //   return next(new AppError('This user is already in your favourites!'));
+  // } else {
+  //   userFavourites.forEach((el, i) => {
+  //     if (el === favouriteUserId) {
+  //       return next(new AppError('This user is already in your favourites!'));
+  //     }
+  //   });
+  // }
 
-  let gotErr = false;
-  if (user.custom_data.favourites) {
-    user.custom_data.favourites.forEach(el => {
-      if (el === favouriteUserId) {
-        gotErr = true;
-      }
-    });
-
-    if (gotErr) {
-      return next(
-        new AppError('This user is already in your favourites!', 400)
-      );
-    }
-
-    await chatkit.updateUser({
-      id: userId,
-      name: user.name,
-      customData: {
-        ...user.custom_data,
-        favourites: [...user.custom_data.favourites, favouriteUserId]
-      }
-    });
-  } else {
-    await chatkit.updateUser({
-      id: userId,
-      name: user.name,
-      customData: {
-        favourites: [favouriteUserId],
-        ...user.custom_data
-      }
-    });
-  }
-
-  const updatedUser = await chatkit.getUser({ id: req.user.id });
+  const user = await User.findByIdAndUpdate(userId, {
+    $push: { favourites: favouriteUserId }
+  }).select('-password -passwordChangedAt');
 
   res.status(200).json({
     status: 'success',
     data: {
-      updatedUser
+      user
     }
   });
 });
@@ -197,130 +164,17 @@ exports.getMe = (req, res, next) => {
 };
 
 exports.myFavourites = catchasync(async (req, res) => {
-  const {
-    custom_data: { favourites }
-  } = await chatkit.getUser({ id: req.user.id });
-
-  const favouritesUsers = await chatkit.getUsersById({ userIds: favourites });
+  const { favourites } = await User.findById(req.params.id).populate(
+    'favourites'
+  );
 
   res.status(200).json({
     status: 'success',
     data: {
-      favouritesUsers
+      favourites
     }
   });
 });
 
-exports.getAllUsers = catchasync(async (req, res) => {
-  const allUsers = await chatkit.getUsers();
-
-  // Filtering own user OR Amins Own Fake Users
-  let filteredUsers;
-
-  if (req.user.custom_data.role === 'admin') {
-    filteredUsers = allUsers.filter(el => {
-      if (
-        el.id !== req.user.id &&
-        !el.custom_data.userAdmin &&
-        el.custom_data.role !== 'owner' &&
-        el.custom_data.role !== 'admin' &&
-        el.custom_data.banned !== true
-      ) {
-        return el;
-      }
-    });
-  } else if (req.user.custom_data.role === 'user') {
-    filteredUsers = allUsers.filter(el => {
-      if (el.custom_data.userAdmin && el.custom_data.banned !== true) {
-        return el;
-      }
-    });
-  } else {
-    filteredUsers = allUsers.filter(el => {
-      if (el.custom_data.banned !== true) {
-        return el;
-      }
-    });
-  }
-
-  // Filtering Users Data
-  const filteringUserData = filteredUsers.map(el => {
-    el.id = undefined;
-    el.custom_data.password = undefined;
-    el.custom_data.favourites = undefined;
-    el.custom_data.credits = undefined;
-    el.custom_data.userAdmin = undefined;
-    el.custom_data.privateImages = undefined;
-
-    return el;
-  });
-
-  res.status(200).json({
-    status: 'success',
-    results: filteredUsers.length,
-    data: {
-      filteringUserData
-    }
-  });
-});
-
-exports.getUser = catchasync(async (req, res) => {
-  const user = await chatkit.getUser({ id: req.params.id });
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user
-    }
-  });
-});
-
-// Get more credits after Email
-exports.verifyUser = catchasync(async (req, res, next) => {
-  const user = await chatkit.getUser({ id: req.params.id });
-
-  if (user.custom_data.emailVerified) {
-    return next(new AppError('Your email is already verified!'));
-  }
-
-  await chatkit.updateUser({
-    id: req.params.id,
-    name: user.name,
-    avatarURL: req.user.avatarURL,
-    customData: {
-      ...user.custom_data,
-      emailVerified: true,
-      credits: user.credits + 130
-    }
-  });
-
-  const verifiedUser = await chatkit.getUser({ id: req.params.id });
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      verifiedUser
-    }
-  });
-});
-
-exports.referalLinkAttach = catchasync(async (req, res, next) => {
-  const { adminId } = req.params;
-
-  await chatkit.updateUser({
-    id: req.user.id,
-    name: req.user.name,
-    avatarURL: req.user.avatarURL,
-    customData: {
-      ...req.user.custom_data,
-      attachedAdmin: adminId
-    }
-  });
-
-  const updatedUser = await chatkit.getUser({ id: req.user.id });
-
-  res.status(200).json({
-    status: 'success',
-    data: { updatedUser }
-  });
-});
+exports.getAllUsers = factoryHandlers.getAll(User);
+exports.getUser = factoryHandlers.getOne(User);

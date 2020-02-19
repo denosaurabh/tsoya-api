@@ -1,55 +1,48 @@
-const chatkit = require('../utils/chatkit');
+const bcrypt = require('bcryptjs');
+const User = require('../models/user.model');
 const catchAsync = require('../utils/catchAsync');
+const factoryHandler = require('../controller/factoryController');
 const AppError = require('../utils/appError');
 
 exports.isActionedUserAdmin = async (req, res, next) => {
-  let admin;
+  const actionUser = await User.findById(req.params.id);
 
-  try {
-    admin = await chatkit.getUser({ id: req.params.id });
-  } catch (err) {
-    return next(new AppError('No Admin found with this ID!', 404));
+  if (actionUser.role !== 'admin') {
+    return next(
+      new AppError(
+        'The user that is going for action is not a admin! A Owner can only take actions on admins!',
+        403
+      )
+    );
   }
-
-  if (admin.custom_data.role !== 'admin') {
-    return next(new AppError('The user to be actioned is not a Admin!'));
-  }
-
-  req.adminUser = admin;
 
   next();
 };
 
 exports.allAdmins = catchAsync(async (req, res, next) => {
-  const allUsers = await chatkit.getUsers();
-
-  const filteringAdmins = allUsers.filter(el => {
-    if (el.custom_data.role === 'admin' && !el.custom_data.userAdmin) {
-      return el;
-    }
-  });
+  const admins = await User.find({ role: 'admin' }).select(
+    '-password -passwordChangedAt -disableMiddlewareHooks -userAdmin'
+  );
 
   res.status(200).json({
     status: 'success',
-    results: filteringAdmins.length,
-    data: { filteringAdmins }
+    results: admins.length,
+    data: { admins }
   });
 });
 
 exports.createAdmin = catchAsync(async (req, res, next) => {
-  const user = await chatkit.createUser({
-    id: req.body.id,
-    name: req.body.id,
-    customData: {
-      email: req.body.email,
-      password: req.body.password,
-      gender: req.body.gender,
-      age: req.body.age,
-      role: 'admin'
-    }
+  const user = await User.create({
+    role: 'admin',
+    name: req.body.name,
+    email: req.body.email,
+    password: req.body.password,
+    gender: req.body.gender,
+    age: req.body.age
   });
 
-  // user.password = undefined;
+  user.password = undefined;
+  user.passwordChangedAt = undefined;
 
   res.status(201).json({
     status: 'success',
@@ -59,115 +52,15 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
   });
 });
 
-exports.removeAdmin = catchAsync(async (req, res, next) => {
-  chatkit.asyncDeleteUser({ id: req.params.id });
-
-  res.status(404).json({
-    status: 'success',
-    data: null
-  });
-});
-
-exports.banAdmin = catchAsync(async (req, res, next) => {
-  const adminId = req.params.id;
-
-  const isBanned = req.adminUser.custom_data.banned;
-
-  await chatkit.updateUser({
-    id: adminId,
-    customData: {
-      ...req.adminUser.custom_data,
-      banned: !isBanned
-    }
-  });
-
-  const bannedAdmin = await chatkit.getUser({ id: req.params.id });
-
-  res.status(200).json({
-    status: 'success',
-    data: { bannedAdmin }
-  });
-});
-
-exports.updateAdmin = catchAsync(async (req, res, next) => {
-  console.log(req.adminUser.email || req.body.email);
-
-  await chatkit.updateUser({
-    id: req.params.id,
-    name: req.body.name,
-    customData: {
-      email: req.body.email || req.adminUser.custom_data.email,
-      password: req.body.password || req.adminUser.custom_data.password,
-      gender: req.body.gender || req.adminUser.custom_data.gender,
-      age: req.body.age || req.adminUser.custom_data.age,
-      role: 'admin'
-    }
-  });
-
-  const updatedAdmin = await chatkit.getUser({
-    id: req.params.id
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      updatedAdmin
-    }
-  });
-});
-
-exports.banningMessages = catchAsync(async (req, res, next) => {
-  const banningMessages = await chatkit.fetchMultipartMessages({
-    roomId: '8f2a2cbe-5fec-4e54-b7a0-5bda4a78639c',
-    limit: 20
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      banningMessages
-    }
-  });
-});
-
-exports.banUser = catchAsync(async (req, res, next) => {
-  const userId = req.params.id;
-
-  const user = await chatkit.getUser({ id: userId });
-
-  await chatkit.updateUser({
-    id: user.id,
-    name: user.name,
-    avatarURL: user.avatarURL,
-    customData: {
-      ...user.custom_data,
-      banned: !user.custom_data.banned
-    }
-  });
-
-  const bannedUser = await chatkit.getUser({ id: req.params.id });
-
-  res.status(200).json({
-    status: 'success',
-    data: { bannedUser }
-  });
-});
-
 exports.createReferalLink = catchAsync(async (req, res, next) => {
-  const { id: adminId } = req.params;
+  const { adminId } = req.params;
 
   const url = `${req.protocol}://${req.get(
     'host'
   )}/v1/api/referal/link/${adminId}`;
 
-  await chatkit.updateUser({
-    id: adminId,
-    name: req.adminUser.name,
-    avatarURL: req.adminUser.avatarURL,
-    customData: {
-      ...req.adminUser.custom_data,
-      myReferalLink: url
-    }
+  await User.findByIdAndUpdate(adminId, {
+    referalLinkAdmin: url
   });
 
   res.status(200).json({
@@ -178,9 +71,32 @@ exports.createReferalLink = catchAsync(async (req, res, next) => {
   });
 });
 
-/*
+exports.removeAdmin = catchAsync(async (req, res, next) => {
+  await User.findByIdAndDelete(req.params.id);
+
+  res.status(404).json({
+    status: 'success',
+    data: null
+  });
+});
+
 exports.passwordToHash = async (req, res, next) => {
   req.body.password = await bcrypt.hash(req.body.password, 12);
   next();
 };
-*/
+
+exports.banAdmin = catchAsync(async (req, res, next) => {
+  const { ban, banTime } = req.body;
+  const adminId = req.params.id;
+
+  // BanTime Functionalties
+
+  const bannedAdmin = await User.findByIdAndUpdate(adminId, { banned: true });
+
+  res.status(200).json({
+    status: 'success',
+    data: { bannedAdmin }
+  });
+});
+
+exports.updateAdmin = factoryHandler.updateOne(User);

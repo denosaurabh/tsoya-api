@@ -1,36 +1,14 @@
-const jwt = require('jsonwebtoken');
-// const bcrypt = require('bcryptjs');
-// const crypto = require('crypto');
-const { promisify } = require('util');
-
-const chatkit = require('../utils/chatkit');
+const User = require('../models/user.model');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
-
-const createSendToken = (user, statusCode, req, res, token) => {
-  res.cookie('jwt', token, {
-    expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
-    ),
-    httpOnly: true,
-    secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
-  });
-
-  res.status(statusCode).json({
-    status: 'success',
-    data: {
-      user
-    }
-  });
-};
+const factoryHandler = require('../controller/factoryController');
 
 // MIDDLEWARES
 exports.isActionFakeUserAdmin = catchAsync(async (req, res, next) => {
-  const user = await chatkit.getUser({ id: req.params.id });
+  const user = await User.findById(req.params.id);
 
-  if (user.custom_data.userAdmin === req.user.id) {
-    req.adminFakeUser = user;
-    next();
+  if (user.userAdmin == req.user._id) {
+    return next();
   } else {
     return next(
       new AppError(
@@ -43,13 +21,7 @@ exports.isActionFakeUserAdmin = catchAsync(async (req, res, next) => {
 
 // QUERIES
 exports.myFakeProfiles = catchAsync(async (req, res, next) => {
-  const users = await chatkit.getUsers();
-
-  const myFakeProfiles = users.filter(el => {
-    if (el.custom_data && el.custom_data.userAdmin === req.user.id) {
-      return el;
-    }
-  });
+  const myFakeProfiles = await User.find({ userAdmin: { $eq: req.user._id } });
 
   res.status(200).json({
     status: 'success',
@@ -59,152 +31,27 @@ exports.myFakeProfiles = catchAsync(async (req, res, next) => {
 });
 
 exports.makeUsers = catchAsync(async (req, res, next) => {
-  const { id, age, email, gender, about, sexDetermination } = req.body;
+  const { name, age, gender } = req.body;
 
-  const user = await chatkit.createUser({
-    id,
-    name: id,
-    customData: {
-      age,
-      gender,
-      about,
-      email,
-      sexDetermination,
-      userAdmin: req.user.id,
-      role: 'admin',
-      credits: 'unlimited'
-    }
+  const user = await User.create({
+    name,
+    age,
+    gender,
+    userAdmin: req.user._id,
+    role: 'admin',
+    credits: undefined,
+    email: process.env.ADMIN_FAKE_PROFILE_TEMP_DATA_EMAIL,
+    password: process.env.ADMIN_FAKE_PROFILE_TEMP_DATA_PASS
   });
 
   // Secreting Some Things
+  user.password = undefined;
+  user.credits = undefined;
 
   res.status(201).json({
     status: 'success',
     data: { user }
   });
-});
-
-// Login with Fake Profiles
-exports.loginwithFakeProfile = catchAsync(async (req, res, next) => {
-  let id = req.query.user_id;
-
-  if (!id) {
-    // eslint-disable-next-line prefer-destructuring
-    id = req.params.id;
-  }
-
-  const adminID = req.query.adminId;
-
-  const authData = chatkit.authenticate({
-    userId: id
-  });
-
-  const user = await chatkit.getUser({
-    id: id
-  });
-
-  // For Banned Users
-  if (user.custom_data.banned) {
-    return next(
-      new AppError('You are currently from this server banned!', 403)
-    );
-  }
-
-  // For Admins Fake Profiles
-  if (user.custom_data.userAdmin !== adminID) {
-    return next(
-      new AppError(
-        'Seems like this User is not your one of Fake Profiles!',
-        403
-      )
-    );
-  }
-
-  // Sending token
-  user.token = authData.body.access_token;
-
-  // createSendToken(user, 200, req, res);
-  res.status(200).json(authData.body);
-});
-
-// Log back to Admin if the Admin Fake User is loged In
-exports.loginInBackToAdmin = catchAsync(async (req, res, next) => {
-  // if (!req.fakeUser) {
-  //   return next(new AppError('There is no admin fake user logged in!', 404));
-  // }
-
-  const adminID = req.query.id;
-
-  if (!adminID) {
-    return next(new AppError('This user is not one of your Fake users!', 403));
-  }
-
-  const authData = chatkit.authenticate({
-    userId: adminID
-  });
-
-  res.status(200).json(authData.body);
-
-  // const decoded = await promisify(jwt.verify)(
-  //   authData.body.access_token,
-  //   process.env.JWT_PUSHER_SECRET
-  // );
-
-  // const user = await chatkit.getUser({
-  //   id: decoded.sub
-  // });
-
-  // // Sending token
-  // req.user = user;
-  // user.token = authData.body.access_token;
-
-  // createSendToken(user, 200, req, res, authData.body.access_token);
-});
-
-// Protecting
-exports.protectFakeProfile = catchAsync(async (req, res, next) => {
-  // 1) Getting token and check of it's there
-  let token;
-
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies.jwt) {
-    token = req.cookies.jwt;
-  }
-
-  if (!token) {
-    return next(
-      new AppError('You are not logged in! Please log in to get access.', 401)
-    );
-  }
-
-  const decoded = await promisify(jwt.verify)(
-    token,
-    process.env.JWT_PUSHER_SECRET
-  );
-
-  const user = await chatkit.getUser({
-    id: decoded.sub
-  });
-
-  console.log(user.custom_data.userAdmin, req.user.id);
-  /*
-  if (user.custom_data.userAdmin !== req.user.id) {
-    return next(
-      new AppError(
-        'This user is not one of your Fake Profiles! Permission Discarded',
-        403
-      )
-    );
-  }*/
-
-  req.fakeUser = user;
-  // req.locals.user = user;
-
-  next();
 });
 
 // exports.updatemyFakeUser = factoryHandler.updateOne(User);
@@ -221,96 +68,30 @@ const filterObj = (obj, ...allowedFields) => {
 exports.updatemyFakeUser = catchAsync(async (req, res, next) => {
   const filteredBody = filterObj(
     req.body,
+    'name',
     'male',
     'age',
     'sexOrientation',
-    'about'
+    'about',
+    'imageCover',
+    'publicImages',
+    'privateImages'
   );
 
-  await chatkit.updateUser({
-    id: req.params.id,
-    name: req.body.name || req.adminFakeUser.name,
-    avatarURL: req.body.imageCover || req.adminFakeUser.avatarURL,
-    customData: { ...req.adminFakeUser.custom_data, filteredBody }
-  });
-
-  const updatedAdminUser = await chatkit.getUser({ id: req.params.id });
+  const updatedUser = await User.findByIdAndUpdate(
+    req.params.id,
+    filteredBody,
+    {
+      new: true,
+      runValidators: true
+    }
+  );
 
   res.status(200).json({
     status: 'success',
     data: {
-      user: updatedAdminUser
+      user: updatedUser
     }
-  });
-});
-
-exports.transferFakeUser = catchAsync(async (req, res, next) => {
-  const userId = req.params.id;
-
-  const user = await chatkit.getUser({ id: userId });
-
-  if (user.custom_data.userAdmin !== req.user.id) {
-    return next(
-      new AppError('This user is not one of your Fake Profiles', 403)
-    );
-  }
-
-  const message = await chatkit.sendSimpleMessage({
-    userId: req.user.id,
-    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
-    text: `${JSON.stringify(user)}`
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: message
-  });
-});
-
-exports.getProfilesOwnerShipsMessages = catchAsync(async (req, res, next) => {
-  const messages = await chatkit.fetchMultipartMessages({
-    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
-    limit: 50
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: messages
-  });
-});
-
-exports.getOwnerShipUser = catchAsync(async (req, res, next) => {
-  const { parts } = await chatkit.fetchMultipartMessage({
-    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
-    messageId: req.params.id
-  });
-
-  const fakeUserStr = parts[0].content;
-
-  const fakeUserObj = JSON.parse(fakeUserStr);
-  console.log(fakeUserObj);
-  
-  await chatkit.updateUser({
-    id: fakeUserObj.id,
-    name: fakeUserObj.name,
-    avatarURL: fakeUserObj.avatarURL,
-    customData: {
-      ...fakeUserObj.custom_data,
-      userAdmin: req.user.id
-    }
-  });
-
-  const fakeUser = await chatkit.getUser({ id: fakeUserObj.id });
-
-  // Deleing Message
-  await chatkit.deleteMessage({
-    roomId: '5b170fb4-9280-4f00-995a-ec1f73c6ddcc',
-    messageId: req.params.id
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: { fakeUser }
   });
 });
 
@@ -318,7 +99,7 @@ exports.getOwnerShipUser = catchAsync(async (req, res, next) => {
 exports.toggleOnline = catchAsync(async (req, res, next) => {
   const { id } = req.params;
 
-  const { online } = await chatkit.getUser({id});
+  const { online } = await User.findById(id);
 
   const updatedUser = await User.findByIdAndUpdate(id, {
     $set: { online: !online }
@@ -332,7 +113,9 @@ exports.toggleOnline = catchAsync(async (req, res, next) => {
 */
 
 exports.myreferalLink = catchAsync(async (req, res, next) => {
-  const { myReferalLink } = req.user.custom_data;
+  const myReferalLink = await User.findById(req.user._id).select(
+    'referalLinkAdmin'
+  );
 
   res.status(200).json({
     status: 'success',
