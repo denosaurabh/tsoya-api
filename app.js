@@ -24,6 +24,19 @@ const app = express();
 // app.enable('trust proxy');
 // app.use(cors());
 // app.options('*', cors());
+app.use(cors());
+const whitelist = ['http://localhost:5000/'];
+const corsOptions = {
+  origin: function(origin, callback) {
+    if (whitelist.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
+app.options('*', cors(corsOptions));
 
 app.use(helmet());
 
