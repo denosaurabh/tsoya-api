@@ -4,7 +4,8 @@
   "description": "Node JS Api Project",
   "main": "app.js",
   "scripts": {
-    "start": "node server"
+    "start": "node server",
+    "prod": "SET NODE_ENV=production&& node server.js"
   },
   "author": "Saurabh",
   "license": "ISC",

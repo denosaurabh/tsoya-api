@@ -21,13 +21,9 @@ const referalRoute = require('./routes/referallinks.routes');
 const app = express();
 
 // API Security and Perforance
-// app.enable('trust proxy');
-// app.use(cors());
-// app.options('*', cors());
-app.use(cors());
-const whitelist = ['https://present-pie.surge.sh/'];
+const whitelist = ['https://stupendous-meeting.surge.sh/'];
 const corsOptions = {
-  origin: function(origin, callback) {
+  origin: function(origin, callback) {  
     if (whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {

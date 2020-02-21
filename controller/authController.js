@@ -66,9 +66,9 @@ exports.signUp = catchAsync(async (req, res, next) => {
     gender: req.body.gender,
     age: req.body.age,
     credits: 120,
-    referalLinkAdmin: req.body.referalLinkAdmin
+    referalLinkAdmin: null
   });
-  console.log(newUser)
+  console.log(newUser);
 
   await chatkit.createUser({
     id: req.body.name,
