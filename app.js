@@ -21,7 +21,7 @@ const referalRoute = require('./routes/referallinks.routes');
 const app = express();
 
 // API Security and Perforance
-const allowedOrigins = ['https://lean-frog.surge.sh/'];
+const allowedOrigins = ['https://lean-frog.surge.sh/', 'http://localhost:3007'];
 
 app.use(
   cors({
@@ -29,7 +29,7 @@ app.use(
       // allow requests with no origin
       // (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) === -1) {
+      if (allowedOrigins.indexOf(origin) === -1 || !origin) {
         const msg =
           'The CORS policy for this site does not ' +
           'allow access from the specified Origin.';
