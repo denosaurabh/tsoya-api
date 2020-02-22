@@ -21,18 +21,24 @@ const referalRoute = require('./routes/referallinks.routes');
 const app = express();
 
 // API Security and Perforance
-const whitelist = ['https://stupendous-meeting.surge.sh/'];
-const corsOptions = {
-  origin: function(origin, callback) {  
-    if (whitelist.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
-};
+const allowedOrigins = ['https://lean-frog.surge.sh/'];
 
-app.options('*', cors(corsOptions));
+app.use(
+  cors({
+    origin: function(origin, callback) {
+      // allow requests with no origin
+      // (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          'The CORS policy for this site does not ' +
+          'allow access from the specified Origin.';
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    }
+  })
+);
 
 app.use(helmet());
 
@@ -63,7 +69,7 @@ app.use('/v1/api/referal', referalRoute);
 
 app.all('*', (req, res, next) => {
   return next(new AppError("Can't find this Endpoint on the Server!", 404));
-});
+}); 
 
 app.use(globalErorHandler);
 

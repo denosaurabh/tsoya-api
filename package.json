@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node server",
+    "dev": "nodemon server",
     "prod": "SET NODE_ENV=production&& node server.js"
   },
   "author": "Saurabh",

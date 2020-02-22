@@ -4,6 +4,7 @@ const User = require('../models/user.model');
 const factoryHandlers = require('./factoryController');
 const catchasync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
+const chatkit = require('../utils/chatkit');
 
 const multerStorage = multer.memoryStorage();
 
@@ -132,30 +133,34 @@ exports.updateMe = catchasync(async (req, res, next) => {
 exports.favouriteUser = catchasync(async (req, res, next) => {
   const userId = req.user.id;
   const favouriteUserId = req.params.id;
+
   console.log(userId, favouriteUserId);
 
-  const userFavourites = await User.findById(userId).select('favorites');
+  const { favourites } = await User.findById(userId);
 
-  // if (userFavourites === favouriteUserId) {
-  //   return next(new AppError('This user is already in your favourites!'));
-  // } else {
-  //   userFavourites.forEach((el, i) => {
-  //     if (el === favouriteUserId) {
-  //       return next(new AppError('This user is already in your favourites!'));
-  //     }
-  //   });
-  // }
+  if (favourites == favouriteUserId) {
+    return next(new AppError('This user is already in your favourites!', 400));
+  } else {
+    favourites.forEach(async (el, i) => {
+      if (el == favouriteUserId) {
+        return next(
+          new AppError('This user is already in your favourites!', 400)
+        );
+        // eslint-disable-next-line no-else-return
+      } else {
+        const user = await User.findByIdAndUpdate(userId, {
+          $push: { favourites: favouriteUserId }
+        }).select('-password -passwordChangedAt');
 
-  const user = await User.findByIdAndUpdate(userId, {
-    $push: { favourites: favouriteUserId }
-  }).select('-password -passwordChangedAt');
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user
-    }
-  });
+        res.status(200).json({
+          status: 'success',
+          data: {
+            user
+          }
+        });
+      }
+    });
+  }
 });
 
 exports.getMe = (req, res, next) => {
@@ -173,6 +178,31 @@ exports.myFavourites = catchasync(async (req, res) => {
     data: {
       favourites
     }
+  });
+});
+
+exports.createRoom = catchasync(async (req, res, next) => {
+  console.log(req.body);
+
+  const ifRoomExist = await chatkit.getRoom({
+    roomId: `${req.user.name}-${req.body.user}`
+  });
+
+  if (ifRoomExist) {
+    return next(new AppError('The Room is already been Created!', 400));
+  }
+
+  const room = await chatkit.createRoom({
+    id: `${req.user.name}-${req.body.user}`,
+    creatorId: req.user.name,
+    name: `${req.user.name}-${req.body.user}`,
+    isPrivate: true,
+    userIds: [req.user.name, req.body.user]
+  });
+
+  res.status(201).json({
+    status: 'success',
+    data: room
   });
 });
 
