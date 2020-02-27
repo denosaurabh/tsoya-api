@@ -23,7 +23,10 @@ router.get('/myfavourites', userController.getMe, userController.myFavourites);
 
 router.post('/favouriteUser/:id', userController.favouriteUser);
 
-router.post('/room', userController.createRoom);
+router
+  .route('/room')
+  .post(userController.createRoom)
+  .patch(userController.updateRoom);
 
 router.patch(
   '/updateMe',

@@ -5,6 +5,7 @@ const factoryHandlers = require('./factoryController');
 const catchasync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 const chatkit = require('../utils/chatkit');
+const APIFeatures = require('../utils/apiFeatures');
 
 const multerStorage = multer.memoryStorage();
 
@@ -29,6 +30,10 @@ exports.uploadUserImages = upload.fields([
 ]);
 
 exports.resizeUserImages = catchasync(async (req, res, next) => {
+  if (!req.files) {
+    return next();
+  }
+
   if (
     !req.files.imageCover ||
     !req.files.publicImages ||
@@ -36,14 +41,16 @@ exports.resizeUserImages = catchasync(async (req, res, next) => {
   )
     return next();
 
-  // 1) Cover image
-  req.body.imageCover = `user-${req.user._id}-${Date.now()}-cover.jpeg`;
+  if (req.body.imageCover) {
+    // 1) Cover image
+    req.body.imageCover = `user-${req.user._id}-${Date.now()}-cover.jpeg`;
 
-  await sharp(req.files.imageCover[0].buffer)
-    .resize(2000, 1333)
-    .toFormat('jpeg')
-    .jpeg({ quality: 90 })
-    .toFile(`public/images/users/${req.body.imageCover}`);
+    await sharp(req.files.imageCover[0].buffer)
+      .resize(2000, 1333)
+      .toFormat('jpeg')
+      .jpeg({ quality: 90 })
+      .toFile(`public/images/users/${req.body.imageCover}`);
+  }
 
   // 2) Public and Private Images
   req.body.publicImages = [];
@@ -112,7 +119,7 @@ exports.updateMe = catchasync(async (req, res, next) => {
     'age',
     'sexOrientation',
     'about',
-    'imageCover',
+    //'imageCover',
     'publicImages',
     'privateImages'
   );
@@ -120,6 +127,11 @@ exports.updateMe = catchasync(async (req, res, next) => {
   const updatedUser = await User.findByIdAndUpdate(req.user.id, filteredBody, {
     new: true,
     runValidators: true
+  });
+
+  await chatkit.updateUser({
+    id: req.body.name,
+    name: req.body.name
   });
 
   res.status(200).json({
@@ -138,29 +150,45 @@ exports.favouriteUser = catchasync(async (req, res, next) => {
 
   const { favourites } = await User.findById(userId);
 
-  if (favourites == favouriteUserId) {
-    return next(new AppError('This user is already in your favourites!', 400));
-  } else {
-    favourites.forEach(async (el, i) => {
-      if (el == favouriteUserId) {
-        return next(
-          new AppError('This user is already in your favourites!', 400)
-        );
-        // eslint-disable-next-line no-else-return
-      } else {
-        const user = await User.findByIdAndUpdate(userId, {
-          $push: { favourites: favouriteUserId }
-        }).select('-password -passwordChangedAt');
-
-        res.status(200).json({
-          status: 'success',
-          data: {
-            user
-          }
-        });
-      }
-    });
+  if (favourites.includes(favouriteUserId)) {
+    console.log('User already in favoruites !!');
+    return;
   }
+
+  const user = await User.findByIdAndUpdate(userId, {
+    $push: { favourites: favouriteUserId }
+  }).select('-password -passwordChangedAt');
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      user
+    }
+  });
+
+  // if (favourites == favouriteUserId) {
+  //   return next(new AppError('This user is already in your favourites!', 400));
+  // } else {
+  //   favourites.forEach(async (el, i) => {
+  //     if (el == favouriteUserId) {
+  //       return next(
+  //         new AppError('This user is already in your favourites!', 400)
+  //       );
+  //       // eslint-disable-next-line no-else-return
+  //     } else {
+  //       const user = await User.findByIdAndUpdate(userId, {
+  //         $push: { favourites: favouriteUserId }
+  //       }).select('-password -passwordChangedAt');
+
+  //       res.status(200).json({
+  //         status: 'success',
+  //         data: {
+  //           user
+  //         }
+  //       });
+  //     }
+  //   });
+  // }
 });
 
 exports.getMe = (req, res, next) => {
@@ -184,27 +212,85 @@ exports.myFavourites = catchasync(async (req, res) => {
 exports.createRoom = catchasync(async (req, res, next) => {
   console.log(req.body);
 
-  const ifRoomExist = await chatkit.getRoom({
-    roomId: `${req.user.name}-${req.body.user}`
-  });
+  try {
+    await chatkit.getRoom({
+      roomId: `${req.user.name}-${req.body.user}`
+    });
 
-  if (ifRoomExist) {
-    return next(new AppError('The Room is already been Created!', 400));
+    return new AppError('The room already exists !!', 400);
+  } catch (err) {
+    const room = await chatkit.createRoom({
+      id: `${req.user.name}-${req.body.user}`,
+      creatorId: req.user.name,
+      name: `${req.user.name}-${req.body.user}`,
+      isPrivate: true,
+      userIds: [req.user.name, req.body.user]
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: room
+    });
   }
+});
 
-  const room = await chatkit.createRoom({
-    id: `${req.user.name}-${req.body.user}`,
-    creatorId: req.user.name,
-    name: `${req.user.name}-${req.body.user}`,
-    isPrivate: true,
-    userIds: [req.user.name, req.body.user]
+exports.updateRoom = catchasync(async (req, res, next) => {
+  console.log(req.body.id);
+
+  const room = await chatkit.getRoom({
+    roomId: req.body.id
   });
 
-  res.status(201).json({
+  console.log(room);
+
+  await chatkit.updateRoom({
+    id: req.body.id,
+    name: room.name,
+    isPrivate: true,
+    customData: {
+      convesationNotes: req.body.conversationNotes,
+      userNotes: req.body.userNotes
+    }
+  });
+
+  res.status(200).json({
     status: 'success',
-    data: room
+    data: {
+      message: 'Room Update successfull'
+    }
   });
 });
 
-exports.getAllUsers = factoryHandlers.getAll(User);
+exports.getAllUsers = catchasync(async (req, res, next) => {
+  let features;
+
+  if (req.user.role === 'user') {
+    features = new APIFeatures(
+      User.find({ userAdmin: { $ne: null } }).select(
+        '-privateImages -password -passwordChangedAt'
+      ),
+      req.query
+    )
+      .filter()
+      .sort();
+  } else {
+    features = new APIFeatures(
+      User.find().select('-privateImages -password -passwordChangedAt'),
+      req.query
+    )
+      .filter()
+      .sort();
+  }
+
+  const data = await features.query;
+
+  res.status(200).json({
+    status: 'success',
+    results: data.length,
+    message: {
+      data
+    }
+  });
+});
+
 exports.getUser = factoryHandlers.getOne(User);

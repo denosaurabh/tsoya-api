@@ -7,10 +7,14 @@ const router = express.Router();
 
 router.use(authController.protect, authController.restrictTo('admin'));
 
+router.route('/').get(adminController.users);
+
 router
   .route('/profiles')
   .get(adminController.myFakeProfiles)
   .post(adminController.makeUsers);
+
+router.route('/profile').post(adminController.chatLoginAdminProfile);
 
 router
   .route('/profile/:id')

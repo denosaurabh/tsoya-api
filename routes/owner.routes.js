@@ -18,7 +18,7 @@ router.delete(
   ownerController.isActionedUserAdmin,
   ownerController.removeAdmin
 );
-
+  
 router.patch(
   '/admin/:id',
   ownerController.isActionedUserAdmin,

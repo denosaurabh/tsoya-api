@@ -1,7 +1,11 @@
+const { promisify } = require('util');
+const jwt = require('jsonwebtoken');
+
 const User = require('../models/user.model');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 const factoryHandler = require('../controller/factoryController');
+const chatkit = require('../utils/chatkit');
 
 // MIDDLEWARES
 exports.isActionFakeUserAdmin = catchAsync(async (req, res, next) => {
@@ -20,6 +24,17 @@ exports.isActionFakeUserAdmin = catchAsync(async (req, res, next) => {
 });
 
 // QUERIES
+exports.users = catchAsync(async (req, res, next) => {
+  const users = await User.find({ role: 'user' });
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      users
+    }
+  });
+});
+
 exports.myFakeProfiles = catchAsync(async (req, res, next) => {
   const myFakeProfiles = await User.find({ userAdmin: { $eq: req.user._id } });
 
@@ -31,17 +46,22 @@ exports.myFakeProfiles = catchAsync(async (req, res, next) => {
 });
 
 exports.makeUsers = catchAsync(async (req, res, next) => {
-  const { name, age, gender } = req.body;
+  const { name, age, gender, email, about } = req.body;
 
   const user = await User.create({
     name,
     age,
-    gender,
     userAdmin: req.user._id,
     role: 'admin',
     credits: undefined,
-    email: process.env.ADMIN_FAKE_PROFILE_TEMP_DATA_EMAIL,
+    email,
+    about,
     password: process.env.ADMIN_FAKE_PROFILE_TEMP_DATA_PASS
+  });
+
+  await chatkit.createUser({
+    id: req.body.name,
+    name: req.body.name
   });
 
   // Secreting Some Things
@@ -95,22 +115,37 @@ exports.updatemyFakeUser = catchAsync(async (req, res, next) => {
   });
 });
 
-/*
-exports.toggleOnline = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
+exports.adminProfileLogin = catchAsync(async (req, res, next) => {
+  
+})
 
-  const { online } = await User.findById(id);
+exports.chatLoginAdminProfile = catchAsync(async (req, res, next) => {
+  const adminProfileId = req.query.id;
 
-  const updatedUser = await User.findByIdAndUpdate(id, {
-    $set: { online: !online }
+  const adminProfile = await User.findById(adminProfileId).select('-password');
+  console.log(adminProfile.userAdmin, req.user.name, adminProfile);
+
+  if (!adminProfile.userAdmin) {
+    return next(new AppError('This is not a Admin Profile', 400));
+  }
+
+  const admin = await User.findById(adminProfile.userAdmin);
+
+  if (admin.name !== req.user.name) {
+    return next(
+      new AppError(
+        'Seems like the profile you are getting access is not yours !!',
+        400
+      )
+    );
+  }
+
+  const authData = chatkit.authenticate({
+    userId: adminProfile.name
   });
 
-  res.status(200).json({
-    status: 'success',
-    data: { updatedUser }
-  });
+  res.status(200).json(authData.body);
 });
-*/
 
 exports.myreferalLink = catchAsync(async (req, res, next) => {
   const myReferalLink = await User.findById(req.user._id).select(

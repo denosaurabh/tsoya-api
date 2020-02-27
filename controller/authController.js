@@ -107,6 +107,11 @@ exports.login = catchAsync(async (req, res, next) => {
     return next(new AppError('You are banned from the Server!', 403));
   }
 
+  // If the User is one of profiles of Admin
+  if (user.userAdmin) {
+    return next(new AppError('YOu cannot login with that user !!', 400));
+  }
+
   console.log('logged');
 
   createSendToken(user, 200, req, res);

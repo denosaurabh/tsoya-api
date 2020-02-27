@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/user.model');
+const chatkit = require('../utils/chatkit');
 const catchAsync = require('../utils/catchAsync');
 const factoryHandler = require('../controller/factoryController');
 const AppError = require('../utils/appError');
@@ -39,6 +40,11 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
     password: req.body.password,
     gender: req.body.gender,
     age: req.body.age
+  });
+
+  await chatkit.createUser({
+    id: req.body.name,
+    name: req.body.name
   });
 
   user.password = undefined;
