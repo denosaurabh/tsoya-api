@@ -23,7 +23,10 @@ const app = express();
 // API Security and Perforance
 const allowedOrigins = ['https://lean-frog.surge.sh/', 'http://localhost:3007'];
 
-app.use(cors());
+app.use(cors({
+    origin: 'https://clever-bone.surge.sh',
+    optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+}));
 
 app.use(helmet());
 
