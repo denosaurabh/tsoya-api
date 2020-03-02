@@ -248,8 +248,7 @@ exports.updateRoom = catchasync(async (req, res, next) => {
     name: room.name,
     isPrivate: true,
     customData: {
-      convesationNotes: req.body.conversationNotes,
-      userNotes: req.body.userNotes
+      convesationNotes: req.body.conversationNotes
     }
   });
 
@@ -291,6 +290,114 @@ exports.getAllUsers = catchasync(async (req, res, next) => {
       data
     }
   });
+});
+
+// Controlling Message send by Admin or User
+exports.messageControl = catchasync(async (req, res, next) => {
+  const { receiverName, roomId, text } = req.body;
+  console.log(receiverName, 'receiver name');
+
+  let updatedUser;
+
+  // Sending Message
+  chatkit
+    .sendSimpleMessage({
+      userId: req.user.name,
+      roomId,
+      text
+    })
+    .then(async messageRes => {
+      console.log('sent message with id', messageRes.id);
+
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ];
+
+      const thisMonth = months[new Date().getMonth()];
+
+      const { userAdmin } = await User.findOne({ name: receiverName });
+      console.log(userAdmin, 'USER ADMIN');
+
+      console.log(req.user.role);
+      if (req.user.role === 'user') {
+        const { credits } = await User.findById(req.user._id);
+        // if (credits < 40) {
+        //   return next(
+        //     new AppError(
+        //       'You have no enough enougn credits, Buy more credits to send messages!',
+        //       403
+        //     )
+        //   );
+        // }
+
+        // Updating Sender
+        updatedUser = await User.findByIdAndUpdate(req.user.id, {
+          $inc: { credits: -40 }
+        });
+        console.log(updatedUser);
+
+        // Updating User profile receiver
+        const updatedAdminprofile = await User.updateOne(
+          {
+            name: receiverName,
+            'stats.month': thisMonth
+          },
+          { $inc: { 'stats.$.receive': 1 } }
+        );
+        console.log(updatedAdminprofile);
+
+        await User.updateOne(
+          {
+            _id: userAdmin,
+            'stats.month': thisMonth
+          },
+          { $inc: { 'stats.$.receive': 1 } }
+        );
+      } else if (req.user.role === 'admin') {
+        // Updating User profile receiver
+        updatedUser = await User.updateOne(
+          {
+            name: req.user.name,
+            'stats.month': thisMonth
+          },
+          { $inc: { 'stats.$.send': 1 } }
+        );
+
+        const __user = await User.findOne({
+          _id: req.user.userAdmin
+        });
+
+        console.log(__user, 'ADMIN!!!!');
+
+        await User.updateOne(
+          {
+            _id: req.user.userAdmin,
+            'stats.month': thisMonth
+          },
+          { $inc: { 'stats.$.send': 1 } }
+        );
+
+        console.log(updatedUser);
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          updatedUser
+        }
+      });
+    });
 });
 
 exports.getUser = factoryHandlers.getOne(User);

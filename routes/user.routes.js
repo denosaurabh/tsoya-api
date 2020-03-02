@@ -28,6 +28,8 @@ router
   .post(userController.createRoom)
   .patch(userController.updateRoom);
 
+router.route('/message').post(userController.messageControl);
+
 router.patch(
   '/updateMe',
   userController.uploadUserImages,

@@ -13,17 +13,14 @@ router
 
 router.route('/referalLink/:adminId').get(ownerController.createReferalLink);
 
-router.delete(
-  '/admin/:id',
-  ownerController.isActionedUserAdmin,
-  ownerController.removeAdmin
-);
-  
-router.patch(
-  '/admin/:id',
-  ownerController.isActionedUserAdmin,
-  ownerController.passwordToHash,
-  ownerController.updateAdmin
-);
+router
+  .route('/admin/:id')
+  .get(ownerController.isActionedUserAdmin, ownerController.getAdmin)
+  .delete(ownerController.isActionedUserAdmin, ownerController.removeAdmin)
+  .patch(
+    ownerController.isActionedUserAdmin,
+    ownerController.passwordToHash,
+    ownerController.updateAdmin
+  );
 
 module.exports = router;

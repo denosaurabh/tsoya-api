@@ -91,6 +91,7 @@ exports.updatemyFakeUser = catchAsync(async (req, res, next) => {
     'name',
     'male',
     'age',
+    'notes',
     'sexOrientation',
     'about',
     'imageCover',
@@ -115,9 +116,59 @@ exports.updatemyFakeUser = catchAsync(async (req, res, next) => {
   });
 });
 
+const signToken = id => {
+  console.log(process.env.JWT_SECRET);
+
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN
+  });
+};
+
+const createSendToken = (user, statusCode, req, res) => {
+  const token = signToken(user._id);
+
+  res.cookie('jwt', token, {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
+  });
+
+  // Remove password from output
+  user.password = undefined;
+  user.referalLinkAdmin = undefined;
+
+  // Including Chatkit Auth
+  const authData = chatkit.authenticate({
+    userId: user.name
+  });
+
+  res.status(statusCode).json({
+    status: 'success',
+    token,
+    chatToken: authData.body,
+    data: {
+      user
+    }
+  });
+};
+
 exports.adminProfileLogin = catchAsync(async (req, res, next) => {
-  
-})
+  const adminProfileId = req.params.id;
+
+  const adminprofile = await User.findById(adminProfileId);
+
+  if (!adminprofile) {
+    return next(new AppError('No Admin Profile found !!', 404));
+  }
+
+  if (adminprofile.userAdmin !== req.user.id) {
+    return next(new AppError('That not your one of profiles!', 401));
+  }
+
+  createSendToken(adminprofile, 200, req, res);
+});
 
 exports.chatLoginAdminProfile = catchAsync(async (req, res, next) => {
   const adminProfileId = req.query.id;

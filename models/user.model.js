@@ -49,6 +49,14 @@ const userSchema = new mongoose.Schema({
     ],
     trim: true
   },
+  notes: {
+    type: String,
+    maxlength: [
+      1200,
+      'Your Description is too long! Keep it within 1200 characters'
+    ],
+    trim: true
+  },
   sexOrientation: {
     type: String,
     enum: ['Homosexual', 'Hetrosexual', 'Bisexual']
@@ -81,6 +89,13 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  stats: [
+    {
+      month: String,
+      send: Number,
+      receive: Number
+    }
+  ],
   online: { type: Boolean, default: false },
   banned: { type: Boolean, default: false },
   banTime: Date,
@@ -97,11 +112,78 @@ userSchema.pre('save', async function(next) {
    These are because the Users made by Admins have not passwords and other things. So, disabling all the Middlewares to execute if the User is made by admin 
   */
 
+  /* For Admin Stats */
+  if (this.role === 'admin') {
+    this.stats = [
+      {
+        month: 'January',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'February',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'March',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'April',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'May',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'June',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'July',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'August',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'September',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'October',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'November',
+        send: 0,
+        receive: 0
+      },
+      {
+        month: 'December',
+        send: 0,
+        receive: 0
+      }
+    ];
+  }
+
   if (this.userAdmin) {
     this.password = undefined;
     console.log('PRE SAVE Hooks executes');
     return next();
   }
+
   // Only run this function if password was actually modified
   if (!this.isModified('password')) return next();
 

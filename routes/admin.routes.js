@@ -18,6 +18,7 @@ router.route('/profile').post(adminController.chatLoginAdminProfile);
 
 router
   .route('/profile/:id')
+  .get(adminController.adminProfileLogin)
   .patch(
     adminController.isActionFakeUserAdmin,
     userController.uploadUserImages,

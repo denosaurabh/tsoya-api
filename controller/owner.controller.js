@@ -21,14 +21,26 @@ exports.isActionedUserAdmin = async (req, res, next) => {
 };
 
 exports.allAdmins = catchAsync(async (req, res, next) => {
-  const admins = await User.find({ role: 'admin' }).select(
-    '-password -passwordChangedAt -disableMiddlewareHooks -userAdmin'
-  );
+  const admins = await User.find({
+    role: 'admin',
+    userAdmin: { $eq: undefined }
+  }).select('-password -passwordChangedAt -disableMiddlewareHooks -userAdmin');
 
   res.status(200).json({
     status: 'success',
     results: admins.length,
     data: { admins }
+  });
+});
+
+exports.getAdmin = catchAsync(async (req, res, next) => {
+  const admin = await User.findById(req.params.id).select(
+    '-password -passwordChangedAt -disableMiddlewareHooks -userAdmin'
+  );
+
+  res.status(200).json({
+    status: 'success',
+    data: { user: admin }
   });
 });
 
